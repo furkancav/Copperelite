@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CuLister — Etsy AI Lister</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #0b0b0b;
+  --s1:       #131313;
+  --s2:       #1a1a1a;
+  --s3:       #222;
+  --border:   #2a2a2a;
+  --border2:  #333;
+  --cu:       #c8793f;
+  --cu2:      #e8964f;
+  --cu-dim:   rgba(200,121,63,.12);
+  --txt:      #ececec;
+  --muted:    #777;
+  --muted2:   #999;
+  --green:    #22c55e;
+  --red:      #ef4444;
+  --radius:   14px;
+  --radius-sm:8px;
+  --shadow:   0 4px 24px rgba(0,0,0,.5);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html { scroll-behavior:smooth; }
+body {
+  background:var(--bg);
+  color:var(--txt);
+  font-family:'Inter',system-ui,sans-serif;
+  font-size:14px;
+  line-height:1.6;
+  min-height:100vh;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:18px 32px;
+  border-bottom:1px solid var(--border);
+  background:var(--s1);
+  position:sticky; top:0; z-index:100;
+  backdrop-filter:blur(12px);
+}
+.logo {
+  font-size:18px; font-weight:700; letter-spacing:-.3px;
+  color:var(--cu2);
+  display:flex; align-items:center; gap:8px;
+}
+.logo svg { width:22px; height:22px; }
+.badge {
+  font-size:11px; font-weight:500;
+  color:var(--muted);
+  background:var(--s3);
+  border:1px solid var(--border2);
+  border-radius:20px;
+  padding:3px 10px;
+  letter-spacing:.5px;
+}
+
+/* ── Steps indicator ─────────────────────────────────────── */
+.steps {
+  display:flex; align-items:center; justify-content:center; gap:0;
+  padding:20px 32px 0;
+  max-width:640px; margin:0 auto;
+}
+.step-item {
+  display:flex; align-items:center; gap:8px;
+  font-size:13px; font-weight:500;
+  color:var(--muted);
+  transition:color .3s;
+}
+.step-item.active { color:var(--cu2); }
+.step-item.done { color:var(--green); }
+.step-num {
+  width:26px; height:26px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:600;
+  border:1.5px solid var(--border2);
+  background:var(--s2);
+  transition:all .3s;
+  flex-shrink:0;
+}
+.step-item.active .step-num {
+  border-color:var(--cu);
+  background:var(--cu-dim);
+  color:var(--cu2);
+}
+.step-item.done .step-num {
+  border-color:var(--green);
+  background:rgba(34,197,94,.12);
+  color:var(--green);
+}
+.step-line {
+  flex:1; height:1px; background:var(--border); margin:0 10px;
+  max-width:60px; min-width:20px;
+}
+
+/* ── Main content ────────────────────────────────────────── */
+main { max-width:720px; margin:0 auto; padding:32px 24px 80px; }
+
+.panel { display:none; }
+.panel.active { display:block; animation:fadeUp .3s ease; }
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ── Upload zone ─────────────────────────────────────────── */
+.upload-zone {
+  border:2px dashed var(--border2);
+  border-radius:var(--radius);
+  background:var(--s1);
+  padding:64px 32px;
+  text-align:center;
+  cursor:pointer;
+  transition:all .2s;
+  position:relative;
+}
+.upload-zone:hover, .upload-zone.drag {
+  border-color:var(--cu);
+  background:var(--cu-dim);
+}
+.upload-zone input[type=file] {
+  position:absolute; inset:0; opacity:0; cursor:pointer; width:100%;
+}
+.upload-icon { color:var(--cu); margin-bottom:16px; }
+.upload-zone h2 { font-size:18px; font-weight:600; margin-bottom:6px; }
+.upload-zone p  { color:var(--muted2); font-size:13px; }
+.upload-zone .formats {
+  margin-top:16px; font-size:11px; color:var(--muted);
+  background:var(--s2); display:inline-block;
+  padding:4px 12px; border-radius:20px; border:1px solid var(--border);
+}
+
+/* ── Card ────────────────────────────────────────────────── */
+.card {
+  background:var(--s1);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:24px;
+  margin-bottom:16px;
+}
+.card-title {
+  font-size:12px; font-weight:600;
+  color:var(--muted); text-transform:uppercase; letter-spacing:.8px;
+  margin-bottom:16px;
+}
+
+/* ── Product info ────────────────────────────────────────── */
+.product-row {
+  display:grid; grid-template-columns:100px 1fr; gap:20px; align-items:start;
+}
+.product-thumb {
+  width:100px; height:100px; border-radius:10px;
+  object-fit:cover; border:1px solid var(--border2);
+  background:var(--s2);
+}
+.product-thumb-placeholder {
+  width:100px; height:100px; border-radius:10px;
+  background:var(--s2); border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--muted);
+}
+.product-name { font-size:17px; font-weight:600; margin-bottom:8px; }
+.tags-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.tag {
+  font-size:11px; font-weight:500;
+  padding:3px 10px; border-radius:20px;
+  background:var(--s3); border:1px solid var(--border2);
+  color:var(--muted2);
+}
+.tag.copper {
+  background:var(--cu-dim); border-color:rgba(200,121,63,.3);
+  color:var(--cu2);
+}
+
+/* ── Form controls ───────────────────────────────────────── */
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.form-group { display:flex; flex-direction:column; gap:6px; }
+label { font-size:12px; font-weight:500; color:var(--muted2); }
+.input-wrap { position:relative; }
+.input-prefix {
+  position:absolute; left:12px; top:50%; transform:translateY(-50%);
+  color:var(--muted); font-weight:500;
+}
+input[type=number], select {
+  width:100%; background:var(--s2); border:1px solid var(--border2);
+  border-radius:var(--radius-sm); color:var(--txt);
+  font-family:inherit; font-size:14px; padding:10px 12px;
+  transition:border-color .2s; outline:none; appearance:none;
+}
+input[type=number] { padding-left:24px; }
+input[type=number]:focus, select:focus { border-color:var(--cu); }
+select {
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23777' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 12px center;
+  padding-right:32px; cursor:pointer;
+}
+option { background:var(--s2); }
+
+/* ── Button ──────────────────────────────────────────────── */
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding:12px 24px; border-radius:var(--radius-sm);
+  font-family:inherit; font-size:14px; font-weight:600;
+  cursor:pointer; border:none; transition:all .2s;
+  text-decoration:none;
+}
+.btn-copper {
+  background:linear-gradient(135deg, var(--cu), var(--cu2));
+  color:#fff;
+}
+.btn-copper:hover { filter:brightness(1.1); transform:translateY(-1px); box-shadow:0 6px 20px rgba(200,121,63,.35); }
+.btn-copper:active { transform:translateY(0); }
+.btn-outline {
+  background:transparent; color:var(--txt);
+  border:1px solid var(--border2);
+}
+.btn-outline:hover { border-color:var(--cu); color:var(--cu2); }
+.btn-green {
+  background:linear-gradient(135deg, #16a34a, #22c55e);
+  color:#fff; font-size:15px; padding:14px 32px;
+}
+.btn-green:hover { filter:brightness(1.08); transform:translateY(-1px); }
+.btn-full { width:100%; }
+.btn:disabled { opacity:.45; pointer-events:none; }
+
+/* ── Progress ────────────────────────────────────────────── */
+.progress-header {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:12px;
+}
+.progress-label { font-weight:500; font-size:14px; }
+.progress-pct { font-size:13px; color:var(--cu2); font-weight:600; }
+.progress-bar {
+  height:4px; background:var(--s3); border-radius:4px; overflow:hidden;
+  margin-bottom:20px;
+}
+.progress-fill {
+  height:100%; border-radius:4px;
+  background:linear-gradient(90deg, var(--cu), var(--cu2));
+  transition:width .5s ease; width:0%;
+}
+.status-msg { font-size:13px; color:var(--muted2); min-height:20px; }
+
+/* ── Image grid ──────────────────────────────────────────── */
+.img-grid {
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:10px;
+  margin-top:20px;
+}
+.img-cell {
+  aspect-ratio:1; border-radius:10px; overflow:hidden;
+  background:var(--s2); border:1px solid var(--border);
+  position:relative;
+}
+.img-cell.empty::after {
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(90deg, var(--s2) 25%, var(--s3) 50%, var(--s2) 75%);
+  background-size:200% 100%;
+  animation:shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+  from { background-position:200% 0; }
+  to   { background-position:-200% 0; }
+}
+.img-cell img {
+  width:100%; height:100%; object-fit:cover;
+  animation:imgIn .4s ease;
+}
+@keyframes imgIn {
+  from { opacity:0; transform:scale(1.04); }
+  to   { opacity:1; transform:scale(1); }
+}
+.img-cell .scene-badge {
+  position:absolute; bottom:6px; left:6px;
+  font-size:10px; font-weight:600;
+  padding:2px 7px; border-radius:10px;
+  background:rgba(0,0,0,.7); color:var(--cu2);
+  backdrop-filter:blur(4px);
+  text-transform:uppercase; letter-spacing:.4px;
+}
+.img-counter {
+  position:absolute; top:8px; right:8px;
+  font-size:11px; font-weight:700;
+  background:rgba(0,0,0,.65); color:#fff;
+  padding:2px 7px; border-radius:8px;
+  backdrop-filter:blur(4px);
+}
+
+/* ── Done state ──────────────────────────────────────────── */
+.done-hero {
+  text-align:center; padding:32px 0 24px;
+}
+.done-icon {
+  width:64px; height:64px; border-radius:50%;
+  background:rgba(34,197,94,.12); border:2px solid var(--green);
+  display:flex; align-items:center; justify-content:center;
+  margin:0 auto 16px;
+  font-size:28px;
+}
+.done-title { font-size:22px; font-weight:700; margin-bottom:6px; }
+.done-subtitle { color:var(--muted2); font-size:14px; }
+.listing-title-preview {
+  margin:20px 0; padding:16px; background:var(--s2);
+  border:1px solid var(--border2); border-radius:var(--radius-sm);
+  font-size:13px; color:var(--muted2); line-height:1.5;
+}
+.listing-title-preview strong { color:var(--txt); display:block; margin-bottom:4px; font-size:12px; }
+
+/* ── Error toast ─────────────────────────────────────────── */
+.error-box {
+  background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3);
+  border-radius:var(--radius-sm); padding:14px 16px;
+  color:#fca5a5; font-size:13px; margin-top:16px; display:none;
+}
+
+/* ── Loading spinner ─────────────────────────────────────── */
+.spinner {
+  width:16px; height:16px; border:2px solid rgba(255,255,255,.3);
+  border-top-color:#fff; border-radius:50%;
+  animation:spin .7s linear infinite; display:none;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── Misc ────────────────────────────────────────────────── */
+.divider { height:1px; background:var(--border); margin:20px 0; }
+.mt-16 { margin-top:16px; }
+.mt-20 { margin-top:20px; }
+.text-center { text-align:center; }
+.flex { display:flex; }
+.gap-12 { gap:12px; }
+.align-center { align-items:center; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polygon points="12,2 22,8.5 22,15.5 12,22 2,15.5 2,8.5"/>
+      <polygon points="12,7 17,9.5 17,14.5 12,17 7,14.5 7,9.5" fill="currentColor" stroke="none" opacity=".4"/>
+    </svg>
+    CuLister
+  </div>
+  <span class="badge">ETSY AI LISTER</span>
+</header>
+
+<!-- Steps -->
+<div class="steps" style="max-width:720px;margin:0 auto;padding:24px 24px 0;">
+  <div class="step-item active" id="si-1">
+    <div class="step-num">1</div><span>Yükle</span>
+  </div>
+  <div class="step-line"></div>
+  <div class="step-item" id="si-2">
+    <div class="step-num">2</div><span>Detaylar</span>
+  </div>
+  <div class="step-line"></div>
+  <div class="step-item" id="si-3">
+    <div class="step-num">3</div><span>Üret</span>
+  </div>
+  <div class="step-line"></div>
+  <div class="step-item" id="si-4">
+    <div class="step-num">4</div><span>Yayında</span>
+  </div>
+</div>
+
+<main>
+
+  <!-- ── Panel 1: Upload ── -->
+  <div class="panel active" id="p1">
+    <div class="upload-zone" id="dropzone">
+      <input type="file" id="fileInput" accept="image/*,.avif">
+      <div class="upload-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+      <h2>Ürün fotoğrafını yükle</h2>
+      <p>Sürükle & bırak ya da tıkla</p>
+      <span class="formats">JPG · PNG · WEBP · AVIF</span>
+    </div>
+    <div class="error-box" id="e1"></div>
+
+    <div style="margin-top:24px;padding:16px;background:var(--s1);border:1px solid var(--border);border-radius:var(--radius);">
+      <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Nasıl çalışır?</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted2);">
+          <span style="color:var(--cu2);font-weight:700;min-width:20px;">1.</span>
+          Ürün fotoğrafını yükle → Gemini yapay zeka ile analiz edilir
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted2);">
+          <span style="color:var(--cu2);font-weight:700;min-width:20px;">2.</span>
+          Fiyat ve mağaza bölümü seç
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted2);">
+          <span style="color:var(--cu2);font-weight:700;min-width:20px;">3.</span>
+          fal.ai Flux Kontext ile 7 profesyonel görsel üretilir (ürün form/patina korunur)
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted2);">
+          <span style="color:var(--cu2);font-weight:700;min-width:20px;">4.</span>
+          SEO başlık, açıklama, taglar → Etsy'de otomatik yayına alınır
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Panel 2: Product info + settings ── -->
+  <div class="panel" id="p2">
+    <div class="card">
+      <div class="card-title">Ürün Bilgileri</div>
+      <div class="product-row">
+        <img id="previewImg" class="product-thumb" src="" alt="">
+        <div>
+          <div class="product-name" id="productName">—</div>
+          <div style="font-size:13px;color:var(--muted2);" id="productStyle">—</div>
+          <div class="tags-row" id="productTags"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Listing Ayarları</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Fiyat (USD)</label>
+          <div class="input-wrap">
+            <span class="input-prefix">$</span>
+            <input type="number" id="priceInput" placeholder="0.00" min="1" step="0.01">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Mağaza Bölümü</label>
+          <select id="sectionSelect"></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="error-box" id="e2"></div>
+
+    <button class="btn btn-copper btn-full mt-16" id="startBtn" onclick="startListing()">
+      <span id="startBtnText">Listing Oluştur</span>
+      <div class="spinner" id="startSpinner"></div>
+      <svg id="startArrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+      </svg>
+    </button>
+
+    <button class="btn btn-outline btn-full mt-16" onclick="reset()" style="margin-top:8px;">
+      ← Farklı görsel seç
+    </button>
+  </div>
+
+  <!-- ── Panel 3: Generating ── -->
+  <div class="panel" id="p3">
+    <div class="card">
+      <div class="progress-header">
+        <span class="progress-label" id="progressLabel">Başlatılıyor...</span>
+        <span class="progress-pct" id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="status-msg" id="statusMsg">Lütfen bekleyin...</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Üretilen Görseller</div>
+      <div class="img-grid" id="imgGrid"></div>
+    </div>
+
+    <div class="error-box" id="e3"></div>
+  </div>
+
+  <!-- ── Panel 4: Done ── -->
+  <div class="panel" id="p4">
+    <div class="card">
+      <div class="done-hero">
+        <div class="done-icon">✓</div>
+        <div class="done-title">Listing Yayında!</div>
+        <div class="done-subtitle">Etsy mağazana başarıyla eklendi</div>
+        <div class="listing-title-preview">
+          <strong>Başlık</strong>
+          <span id="listingTitle">—</span>
+        </div>
+        <a class="btn btn-green mt-16" id="etsyLink" href="#" target="_blank" rel="noopener">
+          Etsy'de Görüntüle
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Üretilen Görseller</div>
+      <div class="img-grid" id="doneGrid"></div>
+    </div>
+
+    <button class="btn btn-outline btn-full mt-16" onclick="reset()">
+      + Yeni Listing Oluştur
+    </button>
+  </div>
+
+</main>
+
+<script>
+// ── State ─────────────────────────────────────────────────
+const SECTIONS = {{ sections|safe }};
+let jobId = null;
+let allImages = [];
+
+// ── Init ──────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Populate section dropdown
+  const sel = document.getElementById('sectionSelect');
+  SECTIONS.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name;
+    sel.appendChild(opt);
+  });
+
+  // File input change
+  document.getElementById('fileInput').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) handleUpload(file);
+  });
+
+  // Drag & drop
+  const dz = document.getElementById('dropzone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('drag');
+    const file = e.dataTransfer.files[0];
+    if (file) handleUpload(file);
+  });
+});
+
+// ── Step management ───────────────────────────────────────
+function showPanel(n) {
+  [1,2,3,4].forEach(i => {
+    document.getElementById(`p${i}`).classList.toggle('active', i === n);
+    const si = document.getElementById(`si-${i}`);
+    si.classList.remove('active','done');
+    if (i < n) si.classList.add('done');
+    if (i === n) si.classList.add('active');
+  });
+}
+
+function showError(panelId, msg) {
+  const el = document.getElementById(panelId);
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideError(panelId) {
+  document.getElementById(panelId).style.display = 'none';
+}
+
+// ── Upload & analyze ──────────────────────────────────────
+async function handleUpload(file) {
+  hideError('e1');
+  const dz = document.getElementById('dropzone');
+  dz.innerHTML = `<div style="color:var(--muted2);font-size:14px;">
+    <div class="spinner" style="display:inline-block;margin:0 auto 12px;width:24px;height:24px;border-width:3px;"></div>
+    <br>Yükleniyor ve analiz ediliyor...
+  </div>`;
+
+  const fd = new FormData();
+  fd.append('image', file);
+
+  try {
+    const r = await fetch('/api/upload', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error || 'Yükleme başarısız');
+    jobId = data.job_id;
+    allImages = [];
+    populateStep2(data.info, data.preview_url);
+    showPanel(2);
+  } catch (err) {
+    restoreDropzone();
+    showError('e1', '⚠ ' + err.message);
+  }
+}
+
+function populateStep2(info, previewUrl) {
+  document.getElementById('previewImg').src = previewUrl;
+  document.getElementById('productName').textContent = info.product_name || '—';
+  document.getElementById('productStyle').textContent =
+    [info.style, info.room_type].filter(Boolean).join(' · ');
+
+  const tagsRow = document.getElementById('productTags');
+  tagsRow.innerHTML = '';
+  const tags = [
+    { label: info.main_material, cls: 'copper' },
+    { label: info.color_finish },
+    { label: info.shape },
+  ];
+  tags.forEach(t => {
+    if (!t.label) return;
+    const el = document.createElement('span');
+    el.className = 'tag' + (t.cls ? ' ' + t.cls : '');
+    el.textContent = t.label;
+    tagsRow.appendChild(el);
+  });
+  (info.key_features || []).slice(0,3).forEach(f => {
+    const el = document.createElement('span');
+    el.className = 'tag';
+    el.textContent = f;
+    tagsRow.appendChild(el);
+  });
+}
+
+// ── Start listing ──────────────────────────────────────────
+async function startListing() {
+  hideError('e2');
+  const price = parseFloat(document.getElementById('priceInput').value);
+  const sectionId = parseInt(document.getElementById('sectionSelect').value);
+  if (!price || price <= 0) { showError('e2', 'Geçerli bir fiyat girin.'); return; }
+
+  const btn = document.getElementById('startBtn');
+  btn.disabled = true;
+  document.getElementById('startBtnText').textContent = 'Başlatılıyor...';
+  document.getElementById('startSpinner').style.display = 'block';
+  document.getElementById('startArrow').style.display = 'none';
+
+  try {
+    const r = await fetch('/api/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: jobId, price, section_id: sectionId }),
+    });
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error || 'Başlatılamadı');
+    buildGrid();
+    showPanel(3);
+    connectSSE();
+  } catch (err) {
+    btn.disabled = false;
+    document.getElementById('startBtnText').textContent = 'Listing Oluştur';
+    document.getElementById('startSpinner').style.display = 'none';
+    document.getElementById('startArrow').style.display = '';
+    showError('e2', '⚠ ' + err.message);
+  }
+}
+
+// ── Image grid ────────────────────────────────────────────
+const TOTAL = 7;
+const LABELS = ['Banyo','Mutfak','Restoran','Oturma Odası','Hotel','Yatak Odası','Yakın Çekim'];
+
+function buildGrid() {
+  const grid = document.getElementById('imgGrid');
+  grid.innerHTML = '';
+  for (let i = 1; i <= TOTAL; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'img-cell empty';
+    cell.id = `cell-${i}`;
+    cell.innerHTML = `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;z-index:1;">${i}</div>`;
+    grid.appendChild(cell);
+  }
+}
+
+function addImageToGrid(index, url, scene) {
+  const cell = document.getElementById(`cell-${index}`);
+  if (!cell) return;
+  cell.classList.remove('empty');
+  cell.innerHTML = `
+    <img src="${url}" alt="Görsel ${index}">
+    <span class="img-counter">${index}/${TOTAL}</span>
+    <span class="scene-badge">${LABELS[index-1] || scene}</span>
+  `;
+  allImages.push({ index, url });
+}
+
+// ── SSE ───────────────────────────────────────────────────
+function connectSSE() {
+  const es = new EventSource(`/api/stream/${jobId}`);
+
+  es.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+
+    if (msg.type === 'ping') return;
+
+    if (msg.type === 'image') {
+      const done = msg.index;
+      const pct = Math.round((done / TOTAL) * 70);
+      setProgress(pct, `${done}/${msg.total} görsel üretildi`, `Flux Kontext ile işleniyor...`);
+      addImageToGrid(msg.index, msg.url, msg.scene);
+    }
+
+    if (msg.type === 'step') {
+      setProgress(msg.progress, msg.msg, '');
+    }
+
+    if (msg.type === 'done') {
+      setProgress(100, 'Tamamlandı!', '');
+      es.close();
+      showDone(msg.url, msg.title);
+    }
+
+    if (msg.type === 'error') {
+      es.close();
+      showError('e3', '⚠ ' + msg.message);
+      setProgress(0, 'Hata oluştu', '');
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    showError('e3', 'Bağlantı kesildi. Lütfen sayfayı yenileyin.');
+  };
+}
+
+function setProgress(pct, label, status) {
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = pct + '%';
+  if (label) document.getElementById('progressLabel').textContent = label;
+  if (status !== undefined) document.getElementById('statusMsg').textContent = status;
+}
+
+// ── Done ──────────────────────────────────────────────────
+function showDone(url, title) {
+  document.getElementById('etsyLink').href = url;
+  document.getElementById('listingTitle').textContent = title || '—';
+
+  const doneGrid = document.getElementById('doneGrid');
+  doneGrid.innerHTML = '';
+  allImages.sort((a,b) => a.index - b.index).forEach(img => {
+    const cell = document.createElement('div');
+    cell.className = 'img-cell';
+    cell.innerHTML = `
+      <img src="${img.url}" alt="">
+      <span class="scene-badge">${LABELS[img.index-1] || ''}</span>
+    `;
+    doneGrid.appendChild(cell);
+  });
+
+  showPanel(4);
+}
+
+// ── Reset ─────────────────────────────────────────────────
+function reset() {
+  jobId = null; allImages = [];
+  document.getElementById('fileInput').value = '';
+  document.getElementById('priceInput').value = '';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progressPct').textContent = '0%';
+  document.getElementById('progressLabel').textContent = 'Başlatılıyor...';
+  document.getElementById('statusMsg').textContent = 'Lütfen bekleyin...';
+  document.getElementById('imgGrid').innerHTML = '';
+  document.getElementById('doneGrid').innerHTML = '';
+  [1,2,3].forEach(n => hideError(`e${n}`));
+  restoreDropzone();
+  showPanel(1);
+}
+
+function restoreDropzone() {
+  document.getElementById('dropzone').innerHTML = `
+    <input type="file" id="fileInput" accept="image/*,.avif">
+    <div class="upload-icon">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+    </div>
+    <h2>Ürün fotoğrafını yükle</h2>
+    <p>Sürükle & bırak ya da tıkla</p>
+    <span class="formats">JPG · PNG · WEBP · AVIF</span>
+  `;
+  document.getElementById('fileInput').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) handleUpload(file);
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# ⚠️ GİZLİ — asla GitHub'a gönderilmemeli
+.env
+data/etsy_token.json
+data/
+
+# Kullanıcı yüklemeleri ve üretilen görseller (geçici)
+uploads/
+static/jobs/
+listing_*/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# Editör
+.vscode/
+.idea/

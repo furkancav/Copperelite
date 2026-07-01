@@ -1,0 +1,40 @@
+# Copy to config.yaml and edit.
+
+# Listing defaults applied to every product (Etsy required/recommended fields)
+listing:
+  state: draft            # draft | active  (KEEP as draft until you've reviewed!)
+  who_made: someone_else  # i_did | someone_else | collective
+  when_made: "2020_2026"  # see Etsy eras
+  is_supply: false
+  quantity: 10
+  taxonomy_id: 1135       # Pendant Lights. Use `python run.py taxonomy --search "pendant"` to find others.
+  # These MUST exist in your shop. Get them with `python run.py shopinfo`.
+  shipping_profile_id: null
+  return_policy_id: null
+  shop_section_id: null
+  materials: ["wood", "metal"]
+
+# Content generation
+content:
+  provider: openai        # openai | gemini
+  target_language: en
+  title_max: 140
+  tags_count: 13
+
+# Images
+images:
+  use_supplier_images: true
+  max_supplier_images: 6
+  generate_lifestyle: true
+  lifestyle_count: 2       # per product. WARNING: cost scales with product count.
+  lifestyle_model: gpt-image-1
+
+# Crawl / scrape
+source:
+  base_url: "https://www.bamyum.com"
+  request_delay_seconds: 1.0
+
+# Etsy API safety
+etsy:
+  requests_per_second: 5   # Etsy hard cap is 10/s, 10000/day
+  dry_run: false           # true = do everything EXCEPT call Etsy write endpoints

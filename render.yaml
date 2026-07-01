@@ -1,0 +1,27 @@
+# Render.com Blueprint — otomatik deploy konfigürasyonu.
+# Dashboard'da "New +" → "Blueprint" ile bu dosyayı seçince her şey hazır gelir.
+services:
+  - type: web
+    name: culister
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # workers=1 ZORUNLU: iş durumu (JOBS) bellekte tutuluyor, tek worker olmalı.
+    # gthread + çok thread: canlı görsel akışı (SSE) + arka plan üretim aynı anda çalışsın.
+    startCommand: gunicorn app:app --worker-class gthread --workers 1 --threads 8 --timeout 300 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # Aşağıdakiler "sync: false" — Render panelinden GİZLİ olarak elle girilecek.
+      - key: ETSY_API_KEY
+        sync: false
+      - key: ETSY_API_SECRET
+        sync: false
+      - key: ETSY_TOKEN_JSON
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FAL_KEY
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
