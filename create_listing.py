@@ -568,11 +568,9 @@ def main():
     # 9. Ölçü varyasyonları
     add_size_variations(client, lid, sizes, price)
 
-    # 10. Yayına al
-    print("Yayına alınıyor...")
-    client.publish_listing(SHOP_ID, lid)
-    print(f"\nListing yayında!")
-    print(f"https://www.etsy.com/listing/{lid}")
+    # 10. TASLAK olarak bırakılır — publish EDİLMEZ.
+    print(f"\nTaslak oluşturuldu! Etsy'de inceleyip kendin yayınlayabilirsin.")
+    print(f"https://www.etsy.com/your/shops/me/tools/listings/{lid}")
 
 
 if __name__ == "__main__":

@@ -125,14 +125,13 @@ def _run(job_id: str, price: float, section_id: int):
             client.upload_listing_image(cl.SHOP_ID, lid, str(img_path), rank=rank)
             time.sleep(0.4)
 
-        push(type="step", msg="Ölçü varyasyonları ekleniyor...", progress=95)
+        push(type="step", msg="Ölçü varyasyonları ekleniyor...", progress=96)
         cl.add_size_variations(client, lid, sizes, price)
 
-        push(type="step", msg="Yayına alınıyor...", progress=98)
-        client.publish_listing(cl.SHOP_ID, lid)
-
+        # Listing TASLAK olarak kalır — publish EDİLMEZ.
+        # Kullanıcı Etsy'de inceleyip kendisi yayınlar.
         push(type="done",
-             url=f"https://www.etsy.com/listing/{lid}",
+             url=f"https://www.etsy.com/your/shops/me/tools/listings/{lid}",
              listing_id=lid,
              title=content["title"])
 
