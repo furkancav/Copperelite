@@ -16,9 +16,10 @@ from etsy_lister.etsy_client import EtsyClient
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
-# ── Basit şifre koruması ──────────────────────────────────────────────────────
-# Render'da APP_PASSWORD environment variable'ı ayarlanınca aktif olur.
-# Boşsa (local geliştirme) koruma kapalıdır.
+# ── Basit kullanıcı adı + şifre koruması ──────────────────────────────────────
+# Render'da APP_PASSWORD ayarlanınca aktif olur. Boşsa (local) koruma kapalıdır.
+# Kullanıcı adı APP_USERNAME ile değiştirilebilir; verilmezse "copper" olur.
+APP_USERNAME = os.getenv("APP_USERNAME", "copper")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 
 
@@ -29,7 +30,7 @@ def _require_password():
     if request.endpoint == "static" or request.path.startswith("/static/"):
         return  # üretilen görseller (uuid path zaten tahmin edilemez)
     auth = request.authorization
-    if not auth or auth.password != APP_PASSWORD:
+    if not auth or auth.username != APP_USERNAME or auth.password != APP_PASSWORD:
         # realm sadece ASCII olmalı (HTTP header kuralı)
         return Response(
             "Giris gerekli", 401,
