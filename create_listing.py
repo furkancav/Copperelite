@@ -195,6 +195,10 @@ PRODUCT_LOCK = (
     "material, texture and every distinctive detail completely faithful to the reference — "
     "do not redesign, restyle, or alter the product itself in any way. Keep the product as the "
     "main focus. Only build a new scene and background around this same, unchanged product. "
+    "Place the product in the scene exactly the way this type of product is used in real life: "
+    "a hanging lamp, pendant or chandelier hangs from the ceiling and is lit; a sink or basin is "
+    "installed into a countertop or vanity; a cup, bowl, vase or planter sits on a surface; wall "
+    "decor is mounted on a wall. Never position the product in a physically impossible or wrong way. "
 )
 
 # Lifestyle görselleri için ortak kurallar
@@ -217,52 +221,51 @@ _INFOGRAPHIC_RULES = (
 IMAGE_SCENES = [
     # 1 — Uzak / geniş çekim, lüks iç mekan
     ("lifestyle",
-     "Wide establishing product shot: the item placed on a white marble countertop in an "
-     "elegant, minimally decorated luxury interior. Soft natural window light from the side "
-     "with a gentle realistic shadow. The full product is clearly visible and centered while "
-     "the tasteful surroundings stay softly out of focus."),
+     "Wide establishing shot set in an elegant luxury marble bathroom interior with tasteful "
+     "minimal decor. Soft natural window light with realistic shadows. The full product is "
+     "clearly visible while the surroundings stay softly out of focus."),
 
-    # 2 — Açısal (45°) çekim, sıcak ahşap yüzey
+    # 2 — Açısal (45°) çekim, sıcak iç mekan
     ("lifestyle",
-     "Three-quarter 45-degree angle shot: the product resting on a warm natural oak surface, "
-     "soft morning daylight raking gently across it to reveal its form and material. A cozy "
-     "home interior sits blurred behind with shallow depth of field. Product sharp and dominant."),
+     "Three-quarter 45-degree angle shot set in a warm modern farmhouse interior. Soft morning "
+     "daylight rakes gently across the product to reveal its form and material; cozy details sit "
+     "blurred behind with shallow depth of field. Product sharp and dominant."),
 
     # 3 — Yakın çekim, ürün odaklı
     ("lifestyle",
-     "Tight close-up product shot filling most of the frame, on a natural linen surface. "
-     "Soft directional daylight reveals the true color and surface texture. The background is a "
-     "gently blurred warm neutral interior. The product is the unmistakable hero of the frame."),
+     "Tight close-up shot with a warm neutral interior gently blurred behind. Soft directional "
+     "daylight reveals the product's true color and surface texture. The product is the "
+     "unmistakable hero of the frame."),
 
     # 4 — Detay / makro çekim
     ("lifestyle",
-     "Extreme detail macro shot focusing on the product's surface texture, material and finish. "
-     "Soft natural raking light emphasizes the craftsmanship and fine details while the rest of "
-     "the product falls gently out of focus. Rich, tactile and realistic — no artificial gloss."),
+     "Extreme macro detail shot focusing on the product's surface texture, material and finish. "
+     "Soft natural raking light emphasizes the craftsmanship and fine details with a shallow "
+     "focus falloff. Rich, tactile and realistic — no artificial gloss."),
 
     # 5 — Perspektif / alçak açı, premium sunum
     ("lifestyle",
-     "Low-angle perspective shot looking slightly upward at the product displayed on a smooth "
-     "stone pedestal. Clean minimal neutral background, soft natural light and a grounded natural "
-     "shadow. Elevated, premium, gallery-like presentation with the product commanding the frame."),
+     "Low-angle perspective shot in a clean, minimal gallery-like space with a soft neutral "
+     "background. Gentle natural light and a grounded, premium presentation with the product "
+     "commanding the frame."),
 
     # 6 — Lifestyle, aydınlık modern yaşam alanı
     ("lifestyle",
-     "The product naturally styled on a modern wooden console table in a bright, airy living "
-     "space. Abundant soft natural daylight with a few minimal, tasteful decor objects nearby. "
-     "Realistic, lived-in yet premium mood, with the product clearly dominant in the composition."),
+     "Set in a bright, airy modern living space with abundant soft natural daylight and a few "
+     "minimal, tasteful decor elements. Realistic, lived-in yet premium mood, with the product "
+     "clearly dominant in the composition."),
 
-    # 7 — Lifestyle, doğal dış mekan
+    # 7 — Lifestyle, doğal / sıcak mekan
     ("lifestyle",
-     "The product placed on a rustic wooden table in a serene garden setting, soft natural "
-     "late-afternoon sunlight and out-of-focus greenery behind. Organic, calm, natural "
-     "atmosphere with realistic outdoor light and a gentle shadow. Product sharp and central."),
+     "Set in a serene natural setting with soft late-afternoon sunlight and out-of-focus "
+     "greenery. Organic, calm, natural atmosphere with realistic light and gentle shadows. "
+     "Product sharp and central."),
 
     # 8 — Premium stüdyo / katalog çekimi
     ("lifestyle",
-     "Clean premium catalog shot: the product on a smooth neutral surface with a subtle soft "
-     "gradient background. Professional daylight-balanced studio lighting with a natural soft "
-     "shadow beneath. Crisp, high-end e-commerce look, product perfectly presented and centered."),
+     "Clean premium studio catalog shot with a smooth neutral gradient background. Professional "
+     "daylight-balanced studio lighting with a natural soft shadow. Crisp, high-end e-commerce "
+     "look, product perfectly presented."),
 
     # 9 — İnfografik: ürün özellikleri (İngilizce)
     ("infographic",
