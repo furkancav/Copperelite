@@ -110,7 +110,7 @@ def _run(job_id: str, price: float, section_id: int):
             "shipping_profile_id": shipping_id,
             "return_policy_id": cl.RETURN_POLICY_ID,
             "shop_section_id": section_id,
-            "tags": [t[:20] for t in content["tags"][:13]],
+            "tags": cl.clean_tags(content["tags"]),
             "materials": ["Copper"],
             "state": "draft",
             "readiness_state_id": cl.READINESS_STATE,

@@ -497,7 +497,13 @@ Return ONLY this JSON:
   "tags": ["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8","tag9","tag10","tag11","tag12","tag13"]
 }}
 
-Tag rules: exactly 13 tags, each max 20 chars. Mix: 4-5 short broad tags (e.g. "copper sink") + 7-8 long-tail 2-3 word phrases (e.g. "handmade copper sink", "rustic vessel sink", "farmhouse bathroom decor"). No repeats.
+Tag rules — output EXACTLY 13 tags, and EVERY tag MUST be 20 characters or fewer (Etsy hard limit — count the characters of each tag before writing it). Weight tags by BUYER PURCHASE INTENT, not broad decor categories. Use this exact structure:
+- 2 broad but relevant tags (e.g. "copper sink", "vessel sink")
+- 7 high-intent long-tail tags combining product + material/finish + type/shape (e.g. "copper vessel sink", "hammered basin", "vanity sink", "round copper sink", "bathroom basin", "farmhouse sink", "custom size sink")
+- 4 use-case / room / purchase-intent tags (e.g. "bathroom remodel", "powder room sink", "vanity basin", "rustic bathroom")
+Prioritize product+material, product+mounting/use type, and product+room/use area — buyers search for exactly what they want to buy.
+AVOID broad decor tags like "copper home decor", "rustic decor", "farmhouse decor", "handmade copper", "copper gift", "vintage decor". Use AT MOST 1-2 of them, and only inside the final 4 use/intent tags.
+All tags lowercase, no duplicates, tailored to THIS specific product ({info.get('product_type', 'product')}). Never exceed 20 characters on any tag.
 Return only valid JSON, no markdown."""
 
     resp = _gemini(
@@ -508,6 +514,31 @@ Return only valid JSON, no markdown."""
         },
     )
     return _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
+
+
+def clean_tags(tags: list[str], limit: int = 13) -> list[str]:
+    """Etsy tag kurallarını uygular: ≤20 karakter, küçük harf, tekrarsız, en fazla 13.
+    20 karakteri aşan tag'i önce kelime sınırında kısaltmayı dener; olmazsa atlar."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in tags or []:
+        t = " ".join(str(raw).strip().lower().split())  # boşlukları normalize et
+        if not t:
+            continue
+        if len(t) > 20:                                  # kelime atarak kısalt
+            words = t.split()
+            while words and len(" ".join(words)) > 20:
+                words.pop()
+            t = " ".join(words)
+            if not t or len(t) > 20:                     # hâlâ uzunsa vazgeç
+                continue
+        if t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+        if len(out) >= limit:
+            break
+    return out
 
 
 # ── 4. Ücretsiz kargo profili ────────────────────────────────────────────────
@@ -672,7 +703,7 @@ def main():
         "shipping_profile_id": shipping_id,
         "return_policy_id":    RETURN_POLICY_ID,
         "shop_section_id":     section_id,
-        "tags":                [t[:20] for t in content["tags"][:13]],
+        "tags":                clean_tags(content["tags"]),
         "materials":           ["Copper"],
         "state":               "draft",
         "readiness_state_id":  READINESS_STATE,
