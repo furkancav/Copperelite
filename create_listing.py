@@ -75,16 +75,35 @@ SIZE_VARIATIONS: dict[str, list[tuple[str, int]]] = {
 
 # ── Gemini helpers ────────────────────────────────────────────────────────────
 
-def _gemini(endpoint: str, payload: dict) -> dict:
-    r = requests.post(
-        f"{GEMINI_BASE}/{endpoint}",
-        headers={"x-goog-api-key": GEMINI_KEY, "Content-Type": "application/json"},
-        json=payload,
-        timeout=180,
-    )
-    if not r.ok:
-        raise RuntimeError(f"Gemini {r.status_code}: {r.text[:300]}")
-    return r.json()
+def _gemini(endpoint: str, payload: dict, retries: int = 5) -> dict:
+    """Gemini çağrısı — geçici hatalarda (503/429/500/502/504) otomatik tekrar dener."""
+    transient = {429, 500, 502, 503, 504}
+    last_err = ""
+    for attempt in range(retries):
+        try:
+            r = requests.post(
+                f"{GEMINI_BASE}/{endpoint}",
+                headers={"x-goog-api-key": GEMINI_KEY, "Content-Type": "application/json"},
+                json=payload,
+                timeout=180,
+            )
+        except requests.RequestException as e:
+            last_err = f"bağlantı hatası: {e}"
+            time.sleep(min(2 ** attempt, 15))
+            continue
+        if r.ok:
+            return r.json()
+        last_err = f"Gemini {r.status_code}: {r.text[:200]}"
+        # Geçici yoğunluk hataları → bekle ve tekrar dene
+        if r.status_code in transient and attempt < retries - 1:
+            wait = min(2 ** attempt, 15)  # 1, 2, 4, 8, 15... sn
+            print(f"  Gemini {r.status_code} (geçici), {wait}sn sonra tekrar deneniyor "
+                  f"({attempt + 1}/{retries})...", flush=True)
+            time.sleep(wait)
+            continue
+        # Kalıcı hata (400/401/403 vb.) → hemen bildir
+        raise RuntimeError(last_err)
+    raise RuntimeError(f"Gemini {retries} denemede yanıt vermedi. Son hata: {last_err}")
 
 
 def _parse_json(text: str) -> dict:
