@@ -402,7 +402,7 @@ option { background:var(--s2); }
         </div>
         <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted2);">
           <span style="color:var(--cu2);font-weight:700;min-width:20px;">3.</span>
-          fal.ai Flux Kontext ile 7 profesyonel görsel üretilir (ürün form/patina korunur)
+          OpenAI gpt-image-1 ile 10 profesyonel görsel üretilir (8 lifestyle + 2 infografik, ürün birebir korunur)
         </div>
         <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted2);">
           <span style="color:var(--cu2);font-weight:700;min-width:20px;">4.</span>
@@ -693,7 +693,7 @@ function connectSSE() {
     if (msg.type === 'image') {
       const done = msg.index;
       const pct = Math.round((done / TOTAL) * 70);
-      setProgress(pct, `${done}/${msg.total} görsel üretildi`, `Flux Kontext ile işleniyor...`);
+      setProgress(pct, `${done}/${msg.total} görsel üretildi`, `gpt-image-1 ile işleniyor...`);
       addImageToGrid(msg.index, msg.url, msg.scene);
     }
 

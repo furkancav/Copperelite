@@ -8,7 +8,7 @@ services:
     buildCommand: pip install -r requirements.txt
     # workers=1 ZORUNLU: iş durumu (JOBS) bellekte tutuluyor, tek worker olmalı.
     # gthread + çok thread: canlı görsel akışı (SSE) + arka plan üretim aynı anda çalışsın.
-    startCommand: gunicorn app:app --worker-class gthread --workers 1 --threads 8 --timeout 300 --bind 0.0.0.0:$PORT
+    startCommand: gunicorn app:app --worker-class gthread --workers 1 --threads 8 --timeout 600 --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.9"

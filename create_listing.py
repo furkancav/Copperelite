@@ -188,68 +188,102 @@ Return only valid JSON, no markdown, no explanation."""
 
 # ── 2. Görsel üretimi ─────────────────────────────────────────────────────────
 
+# Her prompt'un başına eklenen ürün koruma kilidi — ürün birebir korunur.
+PRODUCT_LOCK = (
+    "Recreate the EXACT product shown in the reference image as a high-quality, professional "
+    "1:1 square Etsy product photograph. Preserve its design, form, proportions, color, "
+    "material, texture and every distinctive detail completely faithful to the reference — "
+    "do not redesign, restyle, or alter the product itself in any way. Keep the product as the "
+    "main focus. Only build a new scene and background around this same, unchanged product. "
+)
+
+# Lifestyle görselleri için ortak kurallar
+_LIFESTYLE_RULES = (
+    " Lighting must be natural and realistic — never artificial, never overexposed, never "
+    "fake-looking. The product stays the clear focal point; the scene must not distract from it. "
+    "Absolutely NO text, NO logos, NO watermarks, and NO people anywhere. "
+    "Clean, premium, attention-grabbing, Etsy-listing quality. Strict 1:1 square composition."
+)
+
+# İnfografik görselleri için ortak kurallar
+_INFOGRAPHIC_RULES = (
+    " Every piece of text MUST be written in clearly legible, professionally typeset ENGLISH. "
+    "Spell every word correctly and EXACTLY as given — no typos, no missing or invented letters. "
+    "Keep the layout clean, premium and uncluttered; the product remains the focal point. "
+    "Strict 1:1 square composition suitable for an Etsy listing."
+)
+
+# 8 lifestyle/ürün sahnesi (çeşitli çekim açıları) + 2 İngilizce infografik = 10 görsel
 IMAGE_SCENES = [
-    # Flux Kontext için doğru format:
-    # — Düzenleme komutu değil, nihai fotoğrafın kısa tanımı
-    # — Sahnenin ışığı ürünü nasıl vuruyor → model ürünü yeniden aydınlatır
-    # — Ürünün ortamla fiziksel etkileşimi (gölge, yansıma) kısaca belirtilir
-    # — Kısa (60-100 kelime) ve doğal dil
-
+    # 1 — Uzak / geniş çekim, lüks iç mekan
     ("lifestyle",
-     "Interior design photograph of a handcrafted copper piece on a white Calacatta marble "
-     "bathroom vanity. Warm recessed downlight from above illuminates the hammered copper surface, "
-     "casting a soft shadow onto the marble below. Frosted window light adds cool fill from the "
-     "left. The copper's warm patina reflects faint grey tones from the marble veining. "
-     "Rolled linen towels and brushed chrome faucet softly blurred behind. "
-     "35mm lens, f/2.8. Architectural Digest. Photorealistic."),
+     "Wide establishing product shot: the item placed on a white marble countertop in an "
+     "elegant, minimally decorated luxury interior. Soft natural window light from the side "
+     "with a gentle realistic shadow. The full product is clearly visible and centered while "
+     "the tasteful surroundings stay softly out of focus."),
 
+    # 2 — Açısal (45°) çekim, sıcak ahşap yüzey
     ("lifestyle",
-     "Interior photograph of a handcrafted copper piece in a farmhouse kitchen, "
-     "photographed at golden hour. Warm amber window light from the right rakes across "
-     "the hammered copper surface, matching the warm tone of the reclaimed oak butcher-block "
-     "beneath it. The copper reflects warm wood tones from the island below. "
-     "Cast-iron pan and ceramic crocks softly blurred on open shelves behind. "
-     "35mm, f/2.0, Kodak Portra. Photorealistic."),
+     "Three-quarter 45-degree angle shot: the product resting on a warm natural oak surface, "
+     "soft morning daylight raking gently across it to reveal its form and material. A cozy "
+     "home interior sits blurred behind with shallow depth of field. Product sharp and dominant."),
 
+    # 3 — Yakın çekim, ürün odaklı
     ("lifestyle",
-     "Restaurant interior photograph. A handcrafted copper piece above a white-linen dinner "
-     "table set for two. Candlelight from the table below bounces warm amber light upward, "
-     "catching the copper's hammered texture and patina. The piece casts a warm glow "
-     "downward onto the crystal glasses and silverware. Exposed brick wall in soft focus behind. "
-     "50mm, f/1.8, ISO 800, available light. Fine dining ambiance. Photorealistic."),
+     "Tight close-up product shot filling most of the frame, on a natural linen surface. "
+     "Soft directional daylight reveals the true color and surface texture. The background is a "
+     "gently blurred warm neutral interior. The product is the unmistakable hero of the frame."),
 
+    # 4 — Detay / makro çekim
     ("lifestyle",
-     "Kinfolk magazine interior photograph. A handcrafted copper piece in a bright "
-     "Scandinavian living room. Flat overcast Nordic daylight from a large window fills the "
-     "room evenly, wrapping cleanly around the copper surface. "
-     "The copper's warm patina is the only warm element against pale oak floors, "
-     "white plaster walls, and a linen sofa. Soft shadow beneath the piece, no harsh edges. "
-     "24mm, f/5.6, full depth of field. Airy and minimal. Photorealistic."),
+     "Extreme detail macro shot focusing on the product's surface texture, material and finish. "
+     "Soft natural raking light emphasizes the craftsmanship and fine details while the rest of "
+     "the product falls gently out of focus. Rich, tactile and realistic — no artificial gloss."),
 
+    # 5 — Perspektif / alçak açı, premium sunum
     ("lifestyle",
-     "Architectural photograph of a handcrafted copper piece as the centrepiece of a boutique "
-     "hotel lobby. Overhead track spotlights from the concrete ceiling illuminate the copper "
-     "from above, creating strong top-lit highlights on the hammered surface. "
-     "The copper casts a warm amber reflection onto the geometric terrazzo floor below. "
-     "Moss wall panel behind, marble reception desk blurred in foreground. "
-     "17mm, f/8, long exposure. Photorealistic."),
+     "Low-angle perspective shot looking slightly upward at the product displayed on a smooth "
+     "stone pedestal. Clean minimal neutral background, soft natural light and a grounded natural "
+     "shadow. Elevated, premium, gallery-like presentation with the product commanding the frame."),
 
+    # 6 — Lifestyle, aydınlık modern yaşam alanı
     ("lifestyle",
-     "Lifestyle photograph of a handcrafted copper piece in a bohemian bedroom at golden hour. "
-     "Warm side light from a window on the left wraps around the copper surface, "
-     "its hammered patina glowing in the amber light. The copper's warm tones blend naturally "
-     "with the terracotta plaster wall and rattan headboard behind. "
-     "Soft shadow on the nearby surface grounds the piece in the space. "
-     "85mm, f/1.8, creamy bokeh. Kinfolk quality. Photorealistic."),
+     "The product naturally styled on a modern wooden console table in a bright, airy living "
+     "space. Abundant soft natural daylight with a few minimal, tasteful decor objects nearby. "
+     "Realistic, lived-in yet premium mood, with the product clearly dominant in the composition."),
 
-    ("closeup",
-     "Macro studio photograph. The copper product's hammered surface fills the entire frame. "
-     "Single softbox at 45° upper-left creates directional light — specular highlights on the "
-     "raised hammer peaks, deep micro-shadows in each indentation. "
-     "Patina shifts from warm terracotta orange at peaks to deep verdigris green in recesses. "
-     "Thin rim-light from the right separates the copper from a clean white background. "
-     "Macro lens, f/8, ISO 100. Ultra-sharp, commercial print quality."),
+    # 7 — Lifestyle, doğal dış mekan
+    ("lifestyle",
+     "The product placed on a rustic wooden table in a serene garden setting, soft natural "
+     "late-afternoon sunlight and out-of-focus greenery behind. Organic, calm, natural "
+     "atmosphere with realistic outdoor light and a gentle shadow. Product sharp and central."),
+
+    # 8 — Premium stüdyo / katalog çekimi
+    ("lifestyle",
+     "Clean premium catalog shot: the product on a smooth neutral surface with a subtle soft "
+     "gradient background. Professional daylight-balanced studio lighting with a natural soft "
+     "shadow beneath. Crisp, high-end e-commerce look, product perfectly presented and centered."),
+
+    # 9 — İnfografik: ürün özellikleri (İngilizce)
+    ("infographic",
+     "Clean premium product infographic on a soft neutral background. The product is centered "
+     "with 3 to 4 minimal thin callout lines pointing to key selling points. Short ENGLISH "
+     "labels only: 'Handmade', 'Premium Material', 'Durable Finish', 'Custom Sizes'. Modern, "
+     "elegant English sans-serif typography with generous white space, professional e-commerce style."),
+
+    # 10 — İnfografik: kalite ve kullanım (İngilizce)
+    ("infographic",
+     "Clean product infographic highlighting quality and use, on a soft neutral background. "
+     "The product is shown prominently with 2 to 3 short ENGLISH feature captions such as "
+     "'Handcrafted Quality', 'Built to Last', and 'Perfect for Home & Gifting'. Minimal modern "
+     "English typography in a premium, uncluttered layout."),
 ]
+
+
+def _compose_prompt(scene_type: str, scene_desc: str) -> str:
+    """Ürün kilidi + sahne + tür kurallarını birleştirir."""
+    rules = _INFOGRAPHIC_RULES if scene_type == "infographic" else _LIFESTYLE_RULES
+    return PRODUCT_LOCK + scene_desc + rules
 
 _GEMINI_IMAGE_MODELS = [
     "models/gemini-2.5-flash-preview-image-generation",
@@ -418,9 +452,10 @@ def generate_images(info: dict, image_path: str, out_dir: Path,
         Path(work_path).unlink(missing_ok=True)
 
     saved: list[Path] = []
-    for i, (scene_type, scene_prompt) in enumerate(IMAGE_SCENES, 1):
+    for i, (scene_type, scene_desc) in enumerate(IMAGE_SCENES, 1):
         print(f"  {i}/{total} üretiliyor ({scene_type})...", end="", flush=True)
-        data = _generate_one(scene_prompt, ref_b64, ref_mime)
+        prompt = _compose_prompt(scene_type, scene_desc)
+        data = _generate_one(prompt, ref_b64, ref_mime)
         if data:
             p = out_dir / f"image_{i:02d}.jpg"
             p.write_bytes(data)
