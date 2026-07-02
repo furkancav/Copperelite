@@ -20,8 +20,17 @@ GEMINI_KEY  = os.getenv("GEMINI_API_KEY", "")
 FAL_KEY     = os.getenv("FAL_KEY", "")
 ETSY_KEY    = os.getenv("ETSY_API_KEY", "")
 ETSY_SECRET = os.getenv("ETSY_API_SECRET", "")
+
+# OpenAI gpt-image-1 — placeholder ise yok say
+OPENAI_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+if OPENAI_KEY.startswith("BURAYA") or OPENAI_KEY.lower().startswith("your"):
+    OPENAI_KEY = ""
+# Görsel kalitesi: "low" | "medium" | "high" (env ile değiştirilebilir)
+OPENAI_IMAGE_QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "medium").strip().lower()
+
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 FAL_BASE    = "https://fal.run"
+OPENAI_BASE = "https://api.openai.com/v1"
 
 SHOP_ID           = 66204430
 RETURN_POLICY_ID  = 1489092630994
@@ -248,6 +257,57 @@ _GEMINI_IMAGE_MODELS = [
 ]
 
 
+def _openai_image(prompt: str, ref_b64: str, ref_mime: str) -> bytes | None:
+    """OpenAI gpt-image-1 — referans ürünü koruyarak yeni sahne üretir (/images/edits)."""
+    if not OPENAI_KEY:
+        return None
+    ref_bytes = base64.b64decode(ref_b64)
+    ext = "png" if "png" in ref_mime else "jpg"
+    for attempt in range(3):
+        try:
+            r = requests.post(
+                f"{OPENAI_BASE}/images/edits",
+                headers={"Authorization": f"Bearer {OPENAI_KEY}"},
+                files={"image": (f"ref.{ext}", ref_bytes, ref_mime)},
+                data={
+                    "model": "gpt-image-1",
+                    "prompt": prompt[:30000],
+                    "size": "1024x1024",
+                    "quality": OPENAI_IMAGE_QUALITY,
+                    "n": "1",
+                },
+                timeout=300,
+            )
+            if r.ok:
+                data = r.json().get("data", [])
+                if data and data[0].get("b64_json"):
+                    return base64.b64decode(data[0]["b64_json"])
+                return None
+            body = r.text[:250]
+            if r.status_code in (401, 403):
+                # Geçersiz anahtar VEYA organizasyon doğrulaması gerekli
+                print(f"\n  OpenAI {r.status_code}: {body}", flush=True)
+                return None
+            if r.status_code == 400:
+                print(f"\n  OpenAI 400 (istek/içerik reddi): {body}", flush=True)
+                return None
+            if r.status_code == 429:  # yoğunluk / kota
+                wait = 6 * (attempt + 1)
+                print(f"\n  OpenAI 429 (yoğun), {wait}sn sonra tekrar...", flush=True)
+                time.sleep(wait)
+                continue
+            if attempt < 2:  # 5xx → tekrar dene
+                time.sleep(3 * (attempt + 1))
+                continue
+            print(f"\n  OpenAI {r.status_code}: {body}", flush=True)
+        except requests.RequestException as e:
+            if attempt < 2:
+                time.sleep(2)
+                continue
+            print(f"\n  OpenAI bağlantı hatası: {e}", flush=True)
+    return None
+
+
 def _fal_flux_kontext(prompt: str, ref_b64: str, ref_mime: str) -> bytes | None:
     """fal.ai Flux Kontext — referans ürünü aynen koruyarak sahneyi düzenler."""
     if not FAL_KEY:
@@ -325,7 +385,12 @@ def _gemini_image(prompt: str, ref_b64: str, ref_mime: str) -> bytes | None:
 
 
 def _generate_one(prompt: str, ref_b64: str, ref_mime: str) -> bytes | None:
-    """fal.ai Flux Kontext (birincil) → Gemini (yedek)."""
+    """OpenAI gpt-image-1 (birincil) → fal.ai Flux Kontext → Gemini (yedek)."""
+    if OPENAI_KEY:
+        result = _openai_image(prompt, ref_b64, ref_mime)
+        if result:
+            return result
+        print(" [fal.ai'ye geçiliyor...]", end="", flush=True)
     result = _fal_flux_kontext(prompt, ref_b64, ref_mime)
     if result:
         return result
@@ -336,7 +401,12 @@ def _generate_one(prompt: str, ref_b64: str, ref_mime: str) -> bytes | None:
 def generate_images(info: dict, image_path: str, out_dir: Path,
                      on_image=None) -> list[Path]:
     total = len(IMAGE_SCENES)
-    engine = "fal.ai Flux Kontext" if FAL_KEY else "Gemini"
+    if OPENAI_KEY:
+        engine = f"OpenAI gpt-image-1 ({OPENAI_IMAGE_QUALITY})"
+    elif FAL_KEY:
+        engine = "fal.ai Flux Kontext"
+    else:
+        engine = "Gemini"
     print(f"{total} görsel üretiliyor [{engine}] (2-4 dakika sürebilir)...")
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -509,8 +579,8 @@ def main():
     image_path = sys.argv[1]
     if not Path(image_path).exists():
         sys.exit(f"Dosya bulunamadı: {image_path}")
-    if not FAL_KEY and not GEMINI_KEY:
-        sys.exit("FAL_KEY veya GEMINI_API_KEY .env dosyasında eksik.")
+    if not OPENAI_KEY and not FAL_KEY and not GEMINI_KEY:
+        sys.exit("OPENAI_API_KEY, FAL_KEY veya GEMINI_API_KEY .env dosyasında eksik.")
     if not ETSY_KEY:
         sys.exit("ETSY_API_KEY .env dosyasında eksik.")
 
