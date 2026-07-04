@@ -238,6 +238,21 @@ def api_price():
     return jsonify(ok=True, prices=prices)
 
 
+@app.route("/api/suggest-costs", methods=["POST"])
+def api_suggest_costs():
+    """Her ölçü için tahmini üretici maliyeti önerisi (pazarlık referansı)."""
+    data = request.json or {}
+    job_id = data.get("job_id", "")
+    if job_id not in JOBS:
+        return jsonify(ok=False, error="Geçersiz iş."), 400
+    section_name = _section_name(int(data.get("section_id", 0) or 0))
+    out = []
+    for s in JOBS[job_id].get("sizes", []):
+        en, boy, yuk = cl.derive_dimensions(section_name, s.get("w_cm", 0), s.get("h_cm", 0))
+        out.append({"label": s["label"], "cost": cl.suggest_cost(section_name, en, boy, yuk)})
+    return jsonify(ok=True, costs=out)
+
+
 @app.route("/api/start", methods=["POST"])
 def api_start():
     data = request.json or {}
