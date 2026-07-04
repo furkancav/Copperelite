@@ -27,6 +27,9 @@ if OPENAI_KEY.startswith("BURAYA") or OPENAI_KEY.lower().startswith("your"):
     OPENAI_KEY = ""
 # Görsel kalitesi: "low" | "medium" | "high" (env ile değiştirilebilir)
 OPENAI_IMAGE_QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "medium").strip().lower()
+# DENEME MODU: kaç görsel üretilsin (token tasarrufu). Şu an 1; normalde 10.
+# Render'da MAX_IMAGES=10 env'i ile ya da bu satırı 10 yaparak geri açılır.
+MAX_IMAGES = int(os.getenv("MAX_IMAGES", "1"))
 
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 FAL_BASE    = "https://fal.run"
@@ -503,7 +506,8 @@ def _generate_one(prompt: str, ref_b64: str, ref_mime: str) -> bytes | None:
 
 def generate_images(info: dict, image_path: str, out_dir: Path,
                      on_image=None) -> list[Path]:
-    total = len(IMAGE_SCENES)
+    scenes = IMAGE_SCENES[:max(1, MAX_IMAGES)]
+    total = len(scenes)
     if OPENAI_KEY:
         engine = f"OpenAI gpt-image-1 ({OPENAI_IMAGE_QUALITY})"
     elif FAL_KEY:
@@ -521,7 +525,7 @@ def generate_images(info: dict, image_path: str, out_dir: Path,
         Path(work_path).unlink(missing_ok=True)
 
     saved: list[Path] = []
-    for i, (scene_type, scene_desc) in enumerate(IMAGE_SCENES, 1):
+    for i, (scene_type, scene_desc) in enumerate(scenes, 1):
         print(f"  {i}/{total} üretiliyor ({scene_type})...", end="", flush=True)
         prompt = _compose_prompt(scene_type, scene_desc)
         data = _generate_one(prompt, ref_b64, ref_mime)

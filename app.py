@@ -141,7 +141,8 @@ def _run(job_id: str, priced_sizes: list[dict], section_id: int):
 @app.route("/")
 def index():
     sections = [{"id": s[1], "name": s[0]} for s in cl.SECTIONS]
-    return render_template("index.html", sections=json.dumps(sections))
+    return render_template("index.html", sections=json.dumps(sections),
+                           max_images=max(1, cl.MAX_IMAGES))
 
 
 @app.route("/api/upload", methods=["POST"])
