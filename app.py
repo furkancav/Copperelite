@@ -118,15 +118,25 @@ def _run(job_id: str, priced_sizes: list[dict], section_id: int):
         lid = listing["listing_id"]
 
         push(type="step", msg="Görseller Etsy'ye yükleniyor...", progress=90)
+        image_url = ""
         for rank, img_path in enumerate(images, 1):
-            client.upload_listing_image(cl.SHOP_ID, lid, str(img_path), rank=rank)
+            resp = client.upload_listing_image(cl.SHOP_ID, lid, str(img_path), rank=rank)
+            if rank == 1 and isinstance(resp, dict):
+                image_url = resp.get("url_fullxfull") or resp.get("url_570xN") or ""
             time.sleep(0.4)
 
         push(type="step", msg="Ölçü/fiyat varyasyonları ekleniyor...", progress=96)
         cl.add_size_variations(client, lid, priced_sizes)
 
+        # Kârlılık tablosuna (Google Sheet) her varyasyonu işle
+        push(type="step", msg="Kârlılık tablosuna işleniyor...", progress=98)
+        try:
+            cl.push_to_sheet(lid, content["title"], _section_name(section_id),
+                             image_url, f"https://www.etsy.com/listing/{lid}", priced_sizes)
+        except Exception as e:
+            print("Sheet push hatası:", e)
+
         # Listing TASLAK olarak kalır — publish EDİLMEZ.
-        # Kullanıcı Etsy'de inceleyip kendisi yayınlar.
         push(type="done",
              url=f"https://www.etsy.com/your/shops/me/tools/listings/{lid}",
              listing_id=lid,
@@ -208,9 +218,12 @@ def _cost_to_prices(job_id: str, section_id: int, items: list) -> list[dict]:
             cost = 0
         m = meta.get(label)
         if label and cost > 0 and m:
-            r = cl.price_for_size(cost, section_name, m.get("w_cm", 0), m.get("h_cm", 0))
+            w_cm, h_cm = m.get("w_cm", 0), m.get("h_cm", 0)
+            en, boy, yuk = cl.derive_dimensions(section_name, w_cm, h_cm)
+            r = cl.price_for_size(cost, section_name, w_cm, h_cm)
             out.append({"label": label, "price": r["price"],
-                        "desi": r["desi"], "shipping": r["shipping"]})
+                        "desi": r["desi"], "shipping": r["shipping"],
+                        "cost": cost, "en": en, "boy": boy, "yuk": yuk})
     return out
 
 
@@ -234,13 +247,12 @@ def api_start():
     if job_id not in JOBS:
         return jsonify(ok=False, error="Geçersiz iş."), 400
 
-    # sizes: [{"label": str, "cost": float}, ...] — maliyetten fiyat hesaplanır
+    # sizes: [{"label": str, "cost": float}, ...] — maliyetten fiyat + boyut hesaplanır
     priced = _cost_to_prices(job_id, section_id, data.get("sizes"))
-    priced_sizes = [{"label": p["label"], "price": p["price"]} for p in priced]
-    if not priced_sizes:
+    if not priced:
         return jsonify(ok=False, error="En az bir ölçü için geçerli maliyet girin."), 400
 
-    threading.Thread(target=_run, args=(job_id, priced_sizes, section_id), daemon=True).start()
+    threading.Thread(target=_run, args=(job_id, priced, section_id), daemon=True).start()
     return jsonify(ok=True)
 
 

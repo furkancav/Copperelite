@@ -147,6 +147,45 @@ def price_for_size(cost: float, section_name: str, w_cm: float, h_cm: float,
     margin = category_margin(section_name)
     return calc_target_price(cost, en, derinlik, yuk, margin, ddp_goods=ddp_goods, other=other)
 
+
+def _make_sku(section_name: str, listing_id: int, index: int) -> str:
+    code = SECTION_TO_CATEGORY.get(section_name, "DGR")
+    return f"CED-{code}-{listing_id}-{index}"
+
+
+def push_to_sheet(listing_id: int, title: str, section_name: str,
+                  image_url: str, listing_url: str, rows_data: list[dict]) -> dict:
+    """Kar Takibi Google Sheet'ine varyasyon satırları gönderir (Apps Script webhook).
+    rows_data: [{label, price, cost, en, boy, yuk}, ...]. Env yoksa sessizce atlar."""
+    url = os.getenv("SHEETS_WEBHOOK_URL", "").strip()
+    token = os.getenv("SHEETS_WEBHOOK_TOKEN", "").strip()
+    if not url:
+        return {"ok": False, "skipped": True}
+    rows = []
+    for i, d in enumerate(rows_data, 1):
+        rows.append({
+            "durum": "Taslak",
+            "gorselUrl": image_url,
+            "listingId": listing_id,
+            "sku": _make_sku(section_name, listing_id, i),
+            "urun": title,
+            "varTipi": "Size",
+            "varyasyon": d["label"],
+            "gorunur": "Evet",
+            "listeFiyat": d["price"],
+            "indirim": LIST_DISCOUNT,
+            "en": d.get("en"), "boy": d.get("boy"), "yukseklik": d.get("yuk"),
+            "ddpMal": DDP_GOODS_DEF,
+            "maliyet": d.get("cost"),
+            "urunLinki": listing_url,
+        })
+    try:
+        r = requests.post(url, json={"token": token, "rows": rows}, timeout=30)
+        return r.json() if r.headers.get("content-type","").startswith("application/json") else {"ok": r.ok}
+    except Exception as e:
+        print(f"  Sheet webhook hatası: {e}")
+        return {"ok": False, "error": str(e)}
+
 # shape → [(label, inch_val), ...]
 SIZE_VARIATIONS: dict[str, list[tuple[str, int]]] = {
     "round": [
