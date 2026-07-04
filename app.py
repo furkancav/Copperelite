@@ -173,8 +173,8 @@ def api_upload():
         shutil.copy2(str(raw_path), str(job_dir / f"preview{ext}"))
         preview_name = f"preview{ext}"
 
-    # ABD'de popüler ölçüleri Gemini önerir (kullanıcı her biri için fiyat girecek)
-    sizes = cl.suggest_sizes(info)
+    # Görselden ürün oranını + ABD popüler ölçüleri (kullanıcı her biri için fiyat girecek)
+    sizes = cl.suggest_sizes(info, str(raw_path))
 
     JOBS[job_id] = {
         "q": queue.Queue(),

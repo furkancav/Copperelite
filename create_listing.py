@@ -186,43 +186,63 @@ Return only valid JSON, no markdown, no explanation."""
     return _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
 
 
-def suggest_sizes(info: dict) -> list[dict]:
-    """Gemini: ürün tipine göre ABD pazarında en popüler ölçüleri (inç + cm) önerir.
-    Döner: [{"inch": "16 inch", "cm": "41 cm", "label": "16 inch / 41 cm"}, ...]
-    Başarısız olursa shape'e göre SIZE_VARIATIONS'a düşer."""
+def _num(x) -> str:
+    """8.0 -> '8', 10.67 -> '10.7' (gereksiz ondalık sıfırı at)."""
+    r = round(float(x), 1)
+    return str(int(r)) if r == int(r) else str(r)
+
+
+def suggest_sizes(info: dict, image_path: str | None = None) -> list[dict]:
+    """Görseli analiz edip ürünün EN/BOY oranını + ABD'de popüler 'en' ölçülerini alır,
+    her ölçünün BOYUNU orana göre HESAPLAR (Gemini'nin matematiğine güvenmeden).
+    Döner: [{"inch": "16 x 12 in", "cm": "41 x 30 cm", "label": "16 x 12 in / 41 x 30 cm"}, ...]"""
     ptype = info.get("product_type") or info.get("product_name") or "product"
-    prompt = f"""You are an Etsy sizing expert for handmade home & decor products.
-For this product: {ptype} (material: {info.get('main_material','copper')}, shape: {info.get('shape','round')}),
-list the 5 MOST POPULAR sizes that actually sell in the UNITED STATES market for this exact product type.
+
+    parts: list[dict] = []
+    if image_path:  # görseli ekle — Gemini ürünün gerçek oranını görsün
+        try:
+            work, conv = _to_jpeg_if_needed(image_path)
+            with open(work, "rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode()
+            if conv:
+                Path(work).unlink(missing_ok=True)
+            parts.append({"inline_data": {"mime_type": "image/jpeg", "data": img_b64}})
+        except Exception:
+            pass
+
+    prompt = f"""Look at this product image of a {ptype} (material: {info.get('main_material','copper')}).
+Do TWO things:
+1. Determine the product's real WIDTH-to-HEIGHT ratio (width divided by height) from its ACTUAL shape in the image, ignoring the background. Examples: a tall pendant lamp ~0.7, a wide shallow vessel sink ~2.5, a square item ~1.0, a bird bath ~1.6.
+2. List the 5 MOST POPULAR United States market WIDTH sizes (in whole inches) for this exact product type, smallest to largest.
 
 Return ONLY this JSON:
 {{
-  "sizes": [
-    {{"inch": "16 x 12 in", "cm": "41 x 30 cm", "label": "16 x 12 in / 41 x 30 cm"}}
-  ]
+  "ratio_w_to_h": 0.75,
+  "widths_inch": [8, 12, 16, 20, 24]
 }}
-Rules:
-- EXACTLY 5 sizes, ordered smallest to largest.
-- Give EACH size as TWO dimensions, WIDTH x HEIGHT (en x boy). For round or cylindrical items use diameter x height.
-- Use realistic, US-popular dimensions for THIS product type (a pendant lamp, a vessel sink, a bird bath etc. each have their own typical sizes).
-- "inch" = "<W> x <H> in", "cm" = "<W> x <H> cm", "label" = "<inch> / <cm>".
-- label MUST be 45 characters or fewer.
 Return only valid JSON, no markdown."""
+    parts.append({"text": prompt})
+
     try:
         resp = _gemini(
             "models/gemini-2.5-flash:generateContent",
-            {"contents": [{"parts": [{"text": prompt}]}],
-             "generationConfig": {"temperature": 0.3}},
+            {"contents": [{"parts": parts}],
+             "generationConfig": {"temperature": 0.2}},
         )
         data = _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
-        sizes = data.get("sizes", [])
-        cleaned = []
-        for s in sizes:
-            label = str(s.get("label") or f"{s.get('inch','')} / {s.get('cm','')}").strip(" /")
-            if label:
-                cleaned.append({"inch": s.get("inch", ""), "cm": s.get("cm", ""), "label": label[:45]})
-        if cleaned:
-            return cleaned
+        ratio = float(data.get("ratio_w_to_h", 0) or 0)
+        widths = data.get("widths_inch", []) or []
+        if ratio > 0 and widths:
+            sizes = []
+            for w in widths[:5]:
+                w = float(w)
+                h = w / ratio                        # boy = en ÷ (en/boy oranı)
+                wc, hc = round(w * 2.54), round(h * 2.54)
+                inch = f"{_num(w)} x {_num(h)} in"
+                cm = f"{wc} x {hc} cm"
+                sizes.append({"inch": inch, "cm": cm, "label": f"{inch} / {cm}"[:45]})
+            if sizes:
+                return sizes
     except Exception as e:
         print(f"  suggest_sizes başarısız ({e}), sabit ölçülere düşülüyor.")
     # Fallback: shape'e göre sabit tablo
@@ -704,8 +724,8 @@ def main():
     info = analyze_image(image_path)
     print(f"  → {info['product_name']} | {info['main_material']} | {info['style']} | {info.get('shape','')}")
 
-    # 2. Ölçüler (Gemini ABD'de popüler ölçüleri önerir) + her ölçü için fiyat
-    sizes = suggest_sizes(info)
+    # 2. Ölçüler (görselden oran + ABD popüler ölçüleri) + her ölçü için fiyat
+    sizes = suggest_sizes(info, image_path)
     print("\nBu ürün için ABD'de popüler ölçüler — her biri için fiyat gir (boş = atla):")
     priced_sizes = []
     for s in sizes:
