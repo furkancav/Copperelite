@@ -559,7 +559,7 @@ Product:
 Return ONLY this JSON:
 {{
   "title": "SEO Etsy title max 130 chars, front-load: material + product + style keywords, no ALL CAPS",
-  "description": "Write a 200-250 word SEO-focused listing description. Structure:\n1. First line: '✦ FREE SHIPPING to United States ✦'\n2. One hook sentence about the product.\n3. Key features as bullet points (5-6 bullets with •).\n4. Available sizes section listing all sizes.\n5. Brief care note (1-2 sentences).\n6. Made-to-order note.\nKeep it concise and keyword-rich.",
+  "description": "Write a 200-250 word SEO-focused listing description. Structure:\n1. First line: '✦ FREE SHIPPING to United States ✦'\n2. One hook sentence about the product.\n3. Key features as bullet points (5-6 bullets with •).\n4. Brief care note (1-2 sentences).\n5. Made-to-order note.\nKeep it concise and keyword-rich. Do NOT list any sizes, dimensions, or measurements anywhere in the description — the exact available sizes are appended automatically afterwards.",
   "tags": ["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8","tag9","tag10","tag11","tag12","tag13"]
 }}
 
@@ -579,7 +579,12 @@ Return only valid JSON, no markdown."""
             "generationConfig": {"temperature": 0.7},
         },
     )
-    return _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
+    result = _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
+    # Ölçüleri Gemini'ye bırakma — seçilen ölçüleri DETERMINISTIK ekle (varyasyonlarla birebir aynı)
+    if size_labels:
+        block = "\n\n✦ AVAILABLE SIZES (Width x Height) ✦\n" + "\n".join(f"• {lbl}" for lbl in size_labels)
+        result["description"] = result.get("description", "").rstrip() + block
+    return result
 
 
 def clean_tags(tags: list[str], limit: int = 13) -> list[str]:
@@ -672,11 +677,12 @@ def add_size_variations(client: EtsyClient, listing_id: int, priced_sizes: list[
                 "price": round(float(ps["price"]), 2),
                 "quantity": 10,
                 "is_enabled": True,
+                "readiness_state_id": READINESS_STATE,
             }],
         })
     try:
         client._request(
-            "PUT", f"/shops/{SHOP_ID}/listings/{listing_id}/inventory",
+            "PUT", f"/listings/{listing_id}/inventory",
             json={
                 "products": products,
                 "price_on_property": [513],     # fiyat ölçüye göre DEĞİŞİR
