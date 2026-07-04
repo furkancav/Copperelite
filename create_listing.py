@@ -152,16 +152,16 @@ def price_for_size(cost: float, section_name: str, w_cm: float, h_cm: float,
 # maliyet ≈ K(kategori) × (en büyük ölçü cm) ^ 1.72   (bakır yüzey + işçilik ölçeği)
 # Örnek doğrulama (avize PDL, K=0.40): 25cm→101, 35→153, 45→239, 60→395  (gerçek: 100/150/250/450)
 COST_K = {
-    "PDL": 0.40,  # avize / lamba
-    "SCN": 0.45,  # aplik (genelde 2'li set)
-    "SHW": 0.68,  # duş başlığı (tesisat/test işçiliği pahalı)
-    "FAC": 0.45,  # musluk
-    "SNK": 0.45,  # lavabo
-    "BBT": 0.60,  # kuş havuzu / bahçe (çift katman bakır)
-    "BWL": 0.42,  # kase
-    "MIR": 0.35,  # ayna (çerçeve)
-    "DEC": 0.42,  # dekor
-    "DGR": 0.45,  # diğer
+    "PDL": 0.55,  # avize/lamba — GERÇEK üretici teklifi 25cm=$140'a kalibre
+    "SCN": 0.50,  # aplik (2'li set)
+    "SHW": 0.74,  # duş başlığı (tesisat/test — üst limit)
+    "FAC": 0.50,  # musluk
+    "SNK": 0.50,  # lavabo
+    "BBT": 0.68,  # kuş havuzu / bahçe (çift katman bakır)
+    "BWL": 0.47,  # kase
+    "MIR": 0.38,  # ayna (çerçeve)
+    "DEC": 0.47,  # dekor
+    "DGR": 0.50,  # diğer
 }
 COST_EXP = 1.72
 
@@ -170,8 +170,9 @@ def suggest_cost(section_name: str, en_cm: float, boy_cm: float, yuk_cm: float):
     """Kategori + ölçüden tahmini üretici maliyeti (USD). Pazarlık için başlangıç
     referansı — kesin değil. En büyük boyutu baz alır, temiz rakama yuvarlar."""
     code = SECTION_TO_CATEGORY.get(section_name, "DGR")
-    k = COST_K.get(code, 0.45)
-    dim = max(en_cm or 0, boy_cm or 0, yuk_cm or 0)
+    k = COST_K.get(code, 0.50)
+    # baş ölçü (en/çap) — kullanıcı "25cm model" derken bunu kastediyor
+    dim = (en_cm or 0) or max(boy_cm or 0, yuk_cm or 0)
     if dim <= 0:
         return None
     raw = k * (dim ** COST_EXP)
