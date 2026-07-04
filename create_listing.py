@@ -52,6 +52,78 @@ SECTIONS = [
     ("Bathroom Sink",       59063930),
 ]
 
+# ── Fiyatlandırma motoru (CopperElite kârlılık tablosundan — 2026-06-22) ──────
+# Maliyet + ölçü → desi → kargo(FedEx+DDP) + Etsy ücretleri + kategori kâr marjı
+# → hedef liste fiyatı (%30 indirim sonrası hedef net kâr kalacak şekilde çözülür).
+import math
+
+SHIPPING_TARIFF = {1:17.43,2:20.1,3:31.57,4:33.24,5:34.94,6:40.33,7:45.73,8:51.32,9:56.75,
+    10:62.16,11:71.41,12:75.78,13:86.92,14:98.03,15:109.11,16:120.15,17:131.18,18:142.2,
+    19:153.19,20:164.18,21:174.46,22:184.51,23:194.56,24:204.6,25:214.65,26:259.7,27:269.75,
+    28:279.79,29:289.84,30:407.0,31:419.4,32:431.8,33:444.2,34:456.6,35:469.0,36:481.4,37:493.8,
+    38:506.2,39:518.6,40:531.0,41:543.4,42:555.8,43:568.2,44:580.6,45:593.0,46:605.4,47:617.8,
+    48:630.2,49:642.6,50:655.0,52:681.2,61:799.1,73:956.3,98:1283.8,131:1716.1,167:2187.7}
+
+DESI_DIVISOR   = 5000.0    # en x boy x yükseklik / 5000
+PACKAGE_MARGIN = 1.0       # her kenara eklenecek paket payı (cm)
+DDP_RATE       = 0.12      # gümrük/vergi oranı
+DDP_OPERATION  = 4.50      # DDP sabit operasyon bedeli (USD)
+DDP_GOODS_DEF  = 20.0      # DDP mal bedeli varsayılan (USD)
+LISTING_FEE    = 0.20      # Etsy listeleme/yenileme
+PAYMENT_FIXED  = 0.25      # Etsy payment sabit
+TRANSACTION_FEE= 0.065     # Etsy transaction %
+PAYMENT_PCT    = 0.03      # Etsy payment %
+AD_SHARE       = 0.10      # reklam payı %
+OFFSITE_ADS    = 0.0       # offsite ads % (varsayılan 0)
+LIST_DISCOUNT  = 0.30      # Etsy liste indirimi %
+DEFAULT_MARGIN = 0.50      # kategori bulunamazsa hedef net kâr
+
+CATEGORY_MARGINS = {"SNK":0.45,"PDL":0.40,"SCN":0.39,"FAC":0.30,"SHW":0.40,
+                    "BBT":0.40,"SPA":0.40,"MIR":0.55,"DEC":0.45,"BWL":0.40,"DGR":0.50}
+# CuLister mağaza bölümü → kategori kodu
+SECTION_TO_CATEGORY = {
+    "Copper Sink":"SNK","Kitchen Sink":"SNK","Bathroom Sink":"SNK",
+    "Pendant Lamp":"PDL","Bird Baths":"BBT","Wall Decor":"DEC",
+    "Faucet":"FAC","Garden":"DEC","Bath and Shower Set":"SHW","Spa":"SPA",
+}
+
+
+def category_margin(section_name: str) -> float:
+    code = SECTION_TO_CATEGORY.get(section_name, "DGR")
+    return CATEGORY_MARGINS.get(code, DEFAULT_MARGIN)
+
+
+def _desi(en_cm: float, boy_cm: float, yuk_cm: float) -> int:
+    p = PACKAGE_MARGIN
+    return max(1, math.ceil((en_cm + 2*p) * (boy_cm + 2*p) * (yuk_cm + 2*p) / DESI_DIVISOR))
+
+
+def _shipping_cost(desi: int) -> float:
+    for k in sorted(SHIPPING_TARIFF):        # desi'den büyük/eşit ilk tarife (XLOOKUP)
+        if k >= desi:
+            return SHIPPING_TARIFF[k]
+    return SHIPPING_TARIFF[max(SHIPPING_TARIFF)]
+
+
+def calc_target_price(cost: float, en_cm: float, boy_cm: float, yuk_cm: float,
+                      margin: float, ddp_goods: float | None = None,
+                      packaging: float = 0.0, other: float = 0.0) -> dict:
+    """Maliyet + ölçü + kategori marjından hedef liste fiyatını çözer.
+    Döner: {price, desi, shipping, discounted} (hepsi USD)."""
+    ddp_goods = DDP_GOODS_DEF if ddp_goods is None else ddp_goods
+    desi = _desi(en_cm, boy_cm, yuk_cm)
+    fedex = _shipping_cost(desi)
+    shipping = fedex + ddp_goods * DDP_RATE + DDP_OPERATION
+    fixed = cost + shipping + LISTING_FEE + PAYMENT_FIXED + packaging + other
+    proportional = TRANSACTION_FEE + PAYMENT_PCT + AD_SHARE + OFFSITE_ADS
+    denom = 1 - proportional - margin
+    if denom <= 0:                            # marj çok yüksekse güvenlik
+        denom = 0.05
+    discounted = fixed / denom
+    price = discounted / (1 - LIST_DISCOUNT)
+    return {"price": round(price, 2), "desi": desi,
+            "shipping": round(shipping, 2), "discounted": round(discounted, 2)}
+
 # shape → [(label, inch_val), ...]
 SIZE_VARIATIONS: dict[str, list[tuple[str, int]]] = {
     "round": [
