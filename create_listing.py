@@ -361,65 +361,96 @@ def _num(x) -> str:
     return str(int(r)) if r == int(r) else str(r)
 
 
-def suggest_sizes(info: dict, image_path: str | None = None) -> list[dict]:
-    """Görseli analiz edip ürünün EN/BOY oranını + ABD'de popüler 'en' ölçülerini alır,
-    her ölçünün BOYUNU orana göre HESAPLAR (Gemini'nin matematiğine güvenmeden).
-    Döner: [{"inch": "16 x 12 in", "cm": "41 x 30 cm", "label": "16 x 12 in / 41 x 30 cm"}, ...]"""
-    ptype = info.get("product_type") or info.get("product_name") or "product"
+# Kategori bazlı ABD-popüler BİRİNCİL ölçüler (en/çap/uzunluk, cm) — 5 boyut
+SIZE_PRESETS_CM = {
+    "PDL": [20, 25, 30, 41, 51],   # avize/lamba çapı (8,10,12,16,20 in)
+    "SCN": [23, 28, 33, 41, 46],   # aplik
+    "SHW": [20, 25, 30, 36, 41],   # duş başlığı çapı (8-16 in)
+    "FAC": [10, 13, 15, 18, 20],   # musluk
+    "SNK": [36, 41, 46, 51, 56],   # lavabo uzunluğu (14-22 in)
+    "BBT": [30, 46, 61, 76, 91],   # kuş havuzu çapı (12-36 in)
+    "BWL": [15, 20, 25, 30, 36],   # kase
+    "MIR": [41, 51, 61, 76, 91],   # ayna
+    "DEC": [20, 30, 41, 51, 61],
+    "DGR": [20, 30, 41, 51, 61],
+}
+# Boy/En oranı: varsayılan + (alt, üst) sınır — görselden gelen oran bu aralığa kısılır
+RATIO_DEFAULT = {"PDL": 0.62, "SCN": 1.4, "SHW": 0.3, "FAC": 0.8, "SNK": 0.8,
+                 "BBT": 0.4, "BWL": 0.55, "MIR": 1.0, "DEC": 0.8, "DGR": 0.8}
+RATIO_BOUNDS = {"PDL": (0.45, 1.25), "SCN": (0.8, 2.2), "SHW": (0.2, 0.5),
+                "FAC": (0.4, 1.2), "SNK": (0.55, 1.0), "BBT": (0.28, 0.55),
+                "BWL": (0.35, 0.9), "MIR": (0.7, 1.4), "DEC": (0.4, 1.3), "DGR": (0.4, 1.3)}
 
-    parts: list[dict] = []
-    if image_path:  # görseli ekle — Gemini ürünün gerçek oranını görsün
-        try:
-            work, conv = _to_jpeg_if_needed(image_path)
-            with open(work, "rb") as f:
-                img_b64 = base64.b64encode(f.read()).decode()
-            if conv:
-                Path(work).unlink(missing_ok=True)
-            parts.append({"inline_data": {"mime_type": "image/jpeg", "data": img_b64}})
-        except Exception:
-            pass
 
-    prompt = f"""Look at this product image of a {ptype} (material: {info.get('main_material','copper')}).
-Do TWO things:
-1. Determine the product's real WIDTH-to-HEIGHT ratio (width divided by height) from its ACTUAL shape in the image, ignoring the background. Examples: a tall pendant lamp ~0.7, a wide shallow vessel sink ~2.5, a square item ~1.0, a bird bath ~1.6.
-2. List the 5 MOST POPULAR United States market WIDTH sizes (in whole inches) for this exact product type, smallest to largest.
+def _guess_category(info: dict) -> str:
+    """product_type/name'den kategori kodu tahmin eder (ölçü preseti için)."""
+    t = ((info.get("product_type") or "") + " " + (info.get("product_name") or "")).lower()
+    if any(w in t for w in ("sconce", "wall light", "wall lamp", "wall sconce")):
+        return "SCN"
+    for words, code in [
+        (("pendant", "chandelier", "lamp", "light", "lantern"), "PDL"),
+        (("shower", "rainfall", "rain head"), "SHW"),
+        (("faucet", "tap", "spout"), "FAC"),
+        (("sink", "basin", "vessel", "lavabo"), "SNK"),
+        (("bird bath", "birdbath", "fountain", "garden"), "BBT"),
+        (("mirror",), "MIR"),
+        (("bowl", "planter", "vase", "pot", "cup", "mug", "tray"), "BWL"),
+    ]:
+        if any(w in t for w in words):
+            return code
+    return "DGR"
 
-Return ONLY this JSON:
-{{
-  "ratio_w_to_h": 0.75,
-  "widths_inch": [8, 12, 16, 20, 24]
-}}
-Return only valid JSON, no markdown."""
-    parts.append({"text": prompt})
 
+def _image_wh_ratio(info: dict, image_path: str | None) -> float | None:
+    """Görselden ürünün EN/BOY (width/height) oranını Gemini vision ile alır."""
+    if not image_path:
+        return None
     try:
-        resp = _gemini(
-            "models/gemini-2.5-flash:generateContent",
-            {"contents": [{"parts": parts}],
-             "generationConfig": {"temperature": 0.2}},
-        )
+        work, conv = _to_jpeg_if_needed(image_path)
+        with open(work, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode()
+        if conv:
+            Path(work).unlink(missing_ok=True)
+    except Exception:
+        return None
+    ptype = info.get("product_type") or "product"
+    parts = [{"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
+             {"text": f'Look at this {ptype}. Measure the product only (ignore background, cable, stand). '
+                      f'Return ONLY JSON: {{"ratio_w_to_h": <outer width divided by outer height, e.g. 0.75>}}'}]
+    try:
+        resp = _gemini("models/gemini-2.5-flash:generateContent",
+                       {"contents": [{"parts": parts}], "generationConfig": {"temperature": 0.1}})
         data = _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
-        ratio = float(data.get("ratio_w_to_h", 0) or 0)
-        widths = data.get("widths_inch", []) or []
-        if ratio > 0 and widths:
-            sizes = []
-            for w in widths[:5]:
-                w = float(w)
-                h = w / ratio                        # boy = en ÷ (en/boy oranı)
-                wc, hc = round(w * 2.54), round(h * 2.54)
-                inch = f"{_num(w)} x {_num(h)} in"
-                cm = f"{wc} x {hc} cm"
-                sizes.append({"inch": inch, "cm": cm, "label": f"{inch} / {cm}"[:45],
-                              "w_cm": wc, "h_cm": hc})
-            if sizes:
-                return sizes
-    except Exception as e:
-        print(f"  suggest_sizes başarısız ({e}), sabit ölçülere düşülüyor.")
-    # Fallback: shape'e göre sabit tablo
-    shape = (info.get("shape") or "round").lower()
-    if shape not in SIZE_VARIATIONS:
-        shape = "round"
-    return [{"inch": "", "cm": "", "label": lbl} for lbl, _ in SIZE_VARIATIONS[shape]]
+        r = float(data.get("ratio_w_to_h", 0) or 0)
+        return r if r > 0 else None
+    except Exception:
+        return None
+
+
+def suggest_sizes(info: dict, image_path: str | None = None) -> list[dict]:
+    """Kategori bazlı ABD-popüler ölçü presetlerini kullanır; her ölçünün BOYUNU
+    görsel oranından (kategori sınırlarına kısılarak) hesaplar. Böylece hem gerçekçi
+    ölçüler hem de patlamayan boy elde edilir."""
+    code = _guess_category(info)
+    presets = SIZE_PRESETS_CM.get(code, SIZE_PRESETS_CM["DGR"])
+    lo, hi = RATIO_BOUNDS.get(code, (0.4, 1.3))
+
+    hw = RATIO_DEFAULT.get(code, 0.8)               # boy/en varsayılanı
+    wh = _image_wh_ratio(info, image_path)          # görselden en/boy
+    if wh and wh > 0:
+        hw = 1.0 / wh                               # boy/en = 1 / (en/boy)
+    hw = min(hi, max(lo, hw))                        # kategori sınırına kıs
+
+    sizes = []
+    for w_cm in presets[:5]:
+        h_cm = max(3, round(w_cm * hw))
+        w_in = round(w_cm / 2.54 * 2) / 2           # en yakın yarım inç (temiz görünüm)
+        h_in = round(h_cm / 2.54 * 2) / 2
+        inch = f"{_num(w_in)} x {_num(h_in)} in"
+        cm = f"{w_cm} x {h_cm} cm"
+        sizes.append({"inch": inch, "cm": cm, "label": f"{inch} / {cm}"[:45],
+                      "w_cm": w_cm, "h_cm": h_cm})
+    return sizes
 
 
 # ── 2. Görsel üretimi ─────────────────────────────────────────────────────────
