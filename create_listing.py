@@ -186,6 +186,51 @@ Return only valid JSON, no markdown, no explanation."""
     return _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
 
 
+def suggest_sizes(info: dict) -> list[dict]:
+    """Gemini: ürün tipine göre ABD pazarında en popüler ölçüleri (inç + cm) önerir.
+    Döner: [{"inch": "16 inch", "cm": "41 cm", "label": "16 inch / 41 cm"}, ...]
+    Başarısız olursa shape'e göre SIZE_VARIATIONS'a düşer."""
+    ptype = info.get("product_type") or info.get("product_name") or "product"
+    prompt = f"""You are an Etsy sizing expert for handmade home & decor products.
+For this product: {ptype} (material: {info.get('main_material','copper')}, shape: {info.get('shape','round')}),
+list the 5 MOST POPULAR sizes that actually sell in the UNITED STATES market for this exact product type.
+
+Return ONLY this JSON:
+{{
+  "sizes": [
+    {{"inch": "16 inch", "cm": "41 cm", "label": "16 inch / 41 cm"}}
+  ]
+}}
+Rules:
+- EXACTLY 5 sizes, ordered smallest to largest.
+- Use realistic, US-popular dimensions for THIS product type (a pendant lamp, a vessel sink, a bird bath etc. each have their own typical sizes).
+- "inch" = imperial with unit, "cm" = metric with unit, "label" = "<inch> / <cm>".
+- label MUST be 45 characters or fewer.
+Return only valid JSON, no markdown."""
+    try:
+        resp = _gemini(
+            "models/gemini-2.5-flash:generateContent",
+            {"contents": [{"parts": [{"text": prompt}]}],
+             "generationConfig": {"temperature": 0.3}},
+        )
+        data = _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
+        sizes = data.get("sizes", [])
+        cleaned = []
+        for s in sizes:
+            label = str(s.get("label") or f"{s.get('inch','')} / {s.get('cm','')}").strip(" /")
+            if label:
+                cleaned.append({"inch": s.get("inch", ""), "cm": s.get("cm", ""), "label": label[:45]})
+        if cleaned:
+            return cleaned
+    except Exception as e:
+        print(f"  suggest_sizes başarısız ({e}), sabit ölçülere düşülüyor.")
+    # Fallback: shape'e göre sabit tablo
+    shape = (info.get("shape") or "round").lower()
+    if shape not in SIZE_VARIATIONS:
+        shape = "round"
+    return [{"inch": "", "cm": "", "label": lbl} for lbl, _ in SIZE_VARIATIONS[shape]]
+
+
 # ── 2. Görsel üretimi ─────────────────────────────────────────────────────────
 
 # Her prompt'un başına eklenen ürün koruma kilidi — ürün birebir korunur.
@@ -476,9 +521,9 @@ def generate_images(info: dict, image_path: str, out_dir: Path,
 
 # ── 3. İçerik üretimi ────────────────────────────────────────────────────────
 
-def generate_content(info: dict, sizes: list[tuple[str, int]]) -> dict:
+def generate_content(info: dict, size_labels: list[str]) -> dict:
     print("Başlık, açıklama ve taglar yazılıyor...")
-    size_list = "\n".join(f"- {s[0]}" for s in sizes)
+    size_list = "\n".join(f"- {lbl}" for lbl in size_labels)
     prompt = f"""You are an expert Etsy SEO copywriter for a handmade copper goods shop.
 
 Product:
@@ -587,37 +632,38 @@ def ensure_free_shipping_profile(client: EtsyClient) -> int:
 
 # ── 5. Varyasyon (ölçü) ───────────────────────────────────────────────────────
 
-def add_size_variations(client: EtsyClient, listing_id: int, sizes: list[tuple[str, int]], price: float):
-    print("Ölçü varyasyonları ekleniyor...")
-    products = [
-        {
-            "sku": f"SIZE-{inch}",
+def add_size_variations(client: EtsyClient, listing_id: int, priced_sizes: list[dict]):
+    """priced_sizes: [{"label": str, "price": float}, ...] — HER ölçü kendi fiyatıyla.
+    Etsy'de fiyat 'Size' property'sine bağlanır (price_on_property=[513])."""
+    print("Ölçü/fiyat varyasyonları ekleniyor...")
+    products = []
+    for i, ps in enumerate(priced_sizes, 1):
+        products.append({
+            "sku": f"SIZE-{i}",
             "property_values": [{
                 "property_id": 513,
                 "property_name": "Size",
                 "scale_id": None,
                 "value_ids": [],
-                "values": [label],
+                "values": [ps["label"]],
             }],
             "offerings": [{
-                "price": price,
+                "price": round(float(ps["price"]), 2),
                 "quantity": 10,
                 "is_enabled": True,
             }],
-        }
-        for label, inch in sizes
-    ]
+        })
     try:
         client._request(
             "PUT", f"/shops/{SHOP_ID}/listings/{listing_id}/inventory",
             json={
                 "products": products,
-                "price_on_property": [],
+                "price_on_property": [513],     # fiyat ölçüye göre DEĞİŞİR
                 "quantity_on_property": [],
-                "sku_on_property": [],
+                "sku_on_property": [513],
             },
         )
-        print(f"  {len(sizes)} ölçü eklendi.")
+        print(f"  {len(priced_sizes)} ölçü/fiyat eklendi.")
     except Exception as e:
         print(f"  Varyasyon eklenemedi (Etsy API): {e}")
         print("  → Etsy panelinden manuel ekleyebilirsin.")
@@ -655,21 +701,28 @@ def main():
 
     # 1. Görsel analizi
     info = analyze_image(image_path)
-    shape = info.get("shape", "round").lower()
-    if shape not in SIZE_VARIATIONS:
-        shape = "round"
-    sizes = SIZE_VARIATIONS[shape]
-    print(f"  → {info['product_name']} | {info['main_material']} | {info['style']} | {shape}")
+    print(f"  → {info['product_name']} | {info['main_material']} | {info['style']} | {info.get('shape','')}")
 
-    # 2. Fiyat
-    while True:
-        try:
-            price = float(input("\nFiyat (USD): $"))
-            if price > 0:
+    # 2. Ölçüler (Gemini ABD'de popüler ölçüleri önerir) + her ölçü için fiyat
+    sizes = suggest_sizes(info)
+    print("\nBu ürün için ABD'de popüler ölçüler — her biri için fiyat gir (boş = atla):")
+    priced_sizes = []
+    for s in sizes:
+        while True:
+            raw = input(f"  {s['label']} → $").strip()
+            if not raw:
                 break
-        except ValueError:
-            pass
-        print("Geçerli fiyat gir.")
+            try:
+                p = float(raw)
+                if p > 0:
+                    priced_sizes.append({"label": s["label"], "price": p})
+                    break
+            except ValueError:
+                pass
+            print("    Geçerli bir fiyat gir ya da boş bırak.")
+    if not priced_sizes:
+        sys.exit("En az bir ölçü için fiyat girmelisin.")
+    base_price = min(ps["price"] for ps in priced_sizes)
 
     # 3. Mağaza bölümü
     section_name, section_id = pick(SECTIONS, "Mağaza bölümü")
@@ -681,7 +734,7 @@ def main():
         sys.exit("Hiç görsel üretilemedi, çıkılıyor.")
 
     # 5. İçerik
-    content = generate_content(info, sizes)
+    content = generate_content(info, [ps["label"] for ps in priced_sizes])
     print(f"\nBaşlık: {content['title']}")
     print(f"Taglar: {', '.join(content['tags'][:5])}...")
 
@@ -694,7 +747,7 @@ def main():
     fields = {
         "title":               content["title"][:140],
         "description":         content["description"],
-        "price":               price,
+        "price":               base_price,
         "quantity":            10,
         "who_made":            "i_did",
         "when_made":           "made_to_order",
@@ -723,8 +776,8 @@ def main():
         time.sleep(0.4)
     print(f"\n{len(images)} görsel yüklendi.")
 
-    # 9. Ölçü varyasyonları
-    add_size_variations(client, lid, sizes, price)
+    # 9. Ölçü/fiyat varyasyonları
+    add_size_variations(client, lid, priced_sizes)
 
     # 10. TASLAK olarak bırakılır — publish EDİLMEZ.
     print(f"\nTaslak oluşturuldu! Etsy'de inceleyip kendin yayınlayabilirsin.")

@@ -61,12 +61,13 @@ def _stream(job_id: str):
 
 # ── Background job ────────────────────────────────────────────────────────────
 
-def _run(job_id: str, price: float, section_id: int):
+def _run(job_id: str, priced_sizes: list[dict], section_id: int):
     job = JOBS[job_id]
     q: queue.Queue = job["q"]
     info = job["info"]
     upload_path = job["upload_path"]
     out_dir = STATIC_JOBS / job_id
+    base_price = min(ps["price"] for ps in priced_sizes)
 
     def push(**kw):
         q.put(json.dumps(kw))
@@ -87,11 +88,7 @@ def _run(job_id: str, price: float, section_id: int):
             return
 
         push(type="step", msg="SEO başlık ve açıklama yazılıyor...", progress=78)
-        shape = info.get("shape", "round").lower()
-        if shape not in cl.SIZE_VARIATIONS:
-            shape = "round"
-        sizes = cl.SIZE_VARIATIONS[shape]
-        content = cl.generate_content(info, sizes)
+        content = cl.generate_content(info, [ps["label"] for ps in priced_sizes])
 
         push(type="step", msg="Kargo profili kontrol ediliyor...", progress=82)
         client = EtsyClient(cl.ETSY_KEY, cl.ETSY_SECRET)
@@ -101,7 +98,7 @@ def _run(job_id: str, price: float, section_id: int):
         fields = {
             "title": content["title"][:140],
             "description": content["description"],
-            "price": price,
+            "price": base_price,
             "quantity": 10,
             "who_made": "i_did",
             "when_made": "made_to_order",
@@ -125,8 +122,8 @@ def _run(job_id: str, price: float, section_id: int):
             client.upload_listing_image(cl.SHOP_ID, lid, str(img_path), rank=rank)
             time.sleep(0.4)
 
-        push(type="step", msg="Ölçü varyasyonları ekleniyor...", progress=96)
-        cl.add_size_variations(client, lid, sizes, price)
+        push(type="step", msg="Ölçü/fiyat varyasyonları ekleniyor...", progress=96)
+        cl.add_size_variations(client, lid, priced_sizes)
 
         # Listing TASLAK olarak kalır — publish EDİLMEZ.
         # Kullanıcı Etsy'de inceleyip kendisi yayınlar.
@@ -176,13 +173,17 @@ def api_upload():
         shutil.copy2(str(raw_path), str(job_dir / f"preview{ext}"))
         preview_name = f"preview{ext}"
 
+    # ABD'de popüler ölçüleri Gemini önerir (kullanıcı her biri için fiyat girecek)
+    sizes = cl.suggest_sizes(info)
+
     JOBS[job_id] = {
         "q": queue.Queue(),
         "info": info,
         "upload_path": str(raw_path),
+        "sizes": sizes,
     }
 
-    return jsonify(ok=True, job_id=job_id, info=info,
+    return jsonify(ok=True, job_id=job_id, info=info, sizes=sizes,
                    preview_url=f"/static/jobs/{job_id}/{preview_name}")
 
 
@@ -190,15 +191,25 @@ def api_upload():
 def api_start():
     data = request.json or {}
     job_id = data.get("job_id", "")
-    price = float(data.get("price", 0) or 0)
     section_id = int(data.get("section_id", 0) or 0)
+
+    # sizes: [{"label": str, "price": float}, ...] — sadece geçerli fiyatlılar alınır
+    priced_sizes = []
+    for s in (data.get("sizes") or []):
+        try:
+            p = float(s.get("price", 0) or 0)
+        except (ValueError, TypeError):
+            p = 0
+        label = str(s.get("label", "")).strip()
+        if label and p > 0:
+            priced_sizes.append({"label": label, "price": round(p, 2)})
 
     if job_id not in JOBS:
         return jsonify(ok=False, error="Geçersiz iş."), 400
-    if price <= 0:
-        return jsonify(ok=False, error="Geçerli bir fiyat girin."), 400
+    if not priced_sizes:
+        return jsonify(ok=False, error="En az bir ölçü için geçerli fiyat girin."), 400
 
-    threading.Thread(target=_run, args=(job_id, price, section_id), daemon=True).start()
+    threading.Thread(target=_run, args=(job_id, priced_sizes, section_id), daemon=True).start()
     return jsonify(ok=True)
 
 

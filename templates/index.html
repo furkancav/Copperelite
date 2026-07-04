@@ -427,19 +427,18 @@ option { background:var(--s2); }
     </div>
 
     <div class="card">
-      <div class="card-title">Listing Ayarları</div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Fiyat (USD)</label>
-          <div class="input-wrap">
-            <span class="input-prefix">$</span>
-            <input type="number" id="priceInput" placeholder="0.00" min="1" step="0.01">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Mağaza Bölümü</label>
-          <select id="sectionSelect"></select>
-        </div>
+      <div class="card-title">Ölçüler ve Fiyatlar</div>
+      <p style="font-size:12px;color:var(--muted2);margin:-4px 0 14px;line-height:1.5;">
+        Gemini bu ürün için ABD'de popüler ölçüleri buldu. Satmak istediğin ölçülerin fiyatını gir —
+        boş bıraktığın ölçü listeye eklenmez.
+      </p>
+      <div id="sizesTable"></div>
+    </div>
+
+    <div class="card">
+      <div class="form-group">
+        <label>Mağaza Bölümü</label>
+        <select id="sectionSelect"></select>
       </div>
     </div>
 
@@ -584,7 +583,7 @@ async function handleUpload(file) {
     if (!data.ok) throw new Error(data.error || 'Yükleme başarısız');
     jobId = data.job_id;
     allImages = [];
-    populateStep2(data.info, data.preview_url);
+    populateStep2(data.info, data.preview_url, data.sizes);
     showPanel(2);
   } catch (err) {
     restoreDropzone();
@@ -592,7 +591,7 @@ async function handleUpload(file) {
   }
 }
 
-function populateStep2(info, previewUrl) {
+function populateStep2(info, previewUrl, sizes) {
   document.getElementById('previewImg').src = previewUrl;
   document.getElementById('productName').textContent = info.product_name || '—';
   document.getElementById('productStyle').textContent =
@@ -618,14 +617,42 @@ function populateStep2(info, previewUrl) {
     el.textContent = f;
     tagsRow.appendChild(el);
   });
+
+  renderSizes(sizes || []);
+}
+
+function renderSizes(sizes) {
+  const wrap = document.getElementById('sizesTable');
+  wrap.innerHTML = '';
+  if (!sizes.length) {
+    wrap.innerHTML = '<div style="color:var(--muted2);font-size:13px;">Ölçü önerisi alınamadı — sayfayı yenileyip tekrar deneyin.</div>';
+    return;
+  }
+  sizes.forEach(s => {
+    const label = s.label || `${s.inch || ''} / ${s.cm || ''}`;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(128,128,128,.18);';
+    row.innerHTML = `
+      <span style="flex:1;font-size:14px;font-weight:500;">${label}</span>
+      <div class="input-wrap" style="width:120px;">
+        <span class="input-prefix">$</span>
+        <input type="number" class="size-price" data-label="${label.replace(/"/g,'&quot;')}"
+               placeholder="0.00" min="0" step="0.01" inputmode="decimal">
+      </div>`;
+    wrap.appendChild(row);
+  });
 }
 
 // ── Start listing ──────────────────────────────────────────
 async function startListing() {
   hideError('e2');
-  const price = parseFloat(document.getElementById('priceInput').value);
   const sectionId = parseInt(document.getElementById('sectionSelect').value);
-  if (!price || price <= 0) { showError('e2', 'Geçerli bir fiyat girin.'); return; }
+  const sizes = [];
+  document.querySelectorAll('.size-price').forEach(inp => {
+    const price = parseFloat(inp.value);
+    if (price && price > 0) sizes.push({ label: inp.dataset.label, price });
+  });
+  if (!sizes.length) { showError('e2', 'En az bir ölçü için fiyat girin.'); return; }
 
   const btn = document.getElementById('startBtn');
   btn.disabled = true;
@@ -637,7 +664,7 @@ async function startListing() {
     const r = await fetch('/api/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: jobId, price, section_id: sectionId }),
+      body: JSON.stringify({ job_id: jobId, sizes, section_id: sectionId }),
     });
     const data = await r.json();
     if (!data.ok) throw new Error(data.error || 'Başlatılamadı');
@@ -654,8 +681,8 @@ async function startListing() {
 }
 
 // ── Image grid ────────────────────────────────────────────
-const TOTAL = 7;
-const LABELS = ['Banyo','Mutfak','Restoran','Oturma Odası','Hotel','Yatak Odası','Yakın Çekim'];
+const TOTAL = 10;
+const LABELS = ['Geniş','Açısal','Yakın','Makro','Perspektif','Yaşam Alanı','Doğal','Stüdyo','İnfografik','İnfografik'];
 
 function buildGrid() {
   const grid = document.getElementById('imgGrid');
