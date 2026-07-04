@@ -198,13 +198,14 @@ list the 5 MOST POPULAR sizes that actually sell in the UNITED STATES market for
 Return ONLY this JSON:
 {{
   "sizes": [
-    {{"inch": "16 inch", "cm": "41 cm", "label": "16 inch / 41 cm"}}
+    {{"inch": "16 x 12 in", "cm": "41 x 30 cm", "label": "16 x 12 in / 41 x 30 cm"}}
   ]
 }}
 Rules:
 - EXACTLY 5 sizes, ordered smallest to largest.
+- Give EACH size as TWO dimensions, WIDTH x HEIGHT (en x boy). For round or cylindrical items use diameter x height.
 - Use realistic, US-popular dimensions for THIS product type (a pendant lamp, a vessel sink, a bird bath etc. each have their own typical sizes).
-- "inch" = imperial with unit, "cm" = metric with unit, "label" = "<inch> / <cm>".
+- "inch" = "<W> x <H> in", "cm" = "<W> x <H> cm", "label" = "<inch> / <cm>".
 - label MUST be 45 characters or fewer.
 Return only valid JSON, no markdown."""
     try:
