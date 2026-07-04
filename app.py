@@ -188,27 +188,57 @@ def api_upload():
                    preview_url=f"/static/jobs/{job_id}/{preview_name}")
 
 
+def _section_name(section_id: int) -> str:
+    for name, sid in cl.SECTIONS:
+        if sid == section_id:
+            return name
+    return ""
+
+
+def _cost_to_prices(job_id: str, section_id: int, items: list) -> list[dict]:
+    """[{label, cost}] → [{label, price, desi, shipping}] (maliyetten hedef fiyat)."""
+    section_name = _section_name(section_id)
+    meta = {s["label"]: s for s in JOBS.get(job_id, {}).get("sizes", [])}
+    out = []
+    for s in items or []:
+        label = str(s.get("label", "")).strip()
+        try:
+            cost = float(s.get("cost", 0) or 0)
+        except (ValueError, TypeError):
+            cost = 0
+        m = meta.get(label)
+        if label and cost > 0 and m:
+            r = cl.price_for_size(cost, section_name, m.get("w_cm", 0), m.get("h_cm", 0))
+            out.append({"label": label, "price": r["price"],
+                        "desi": r["desi"], "shipping": r["shipping"]})
+    return out
+
+
+@app.route("/api/price", methods=["POST"])
+def api_price():
+    """Maliyet → hedef fiyat önizlemesi (canlı; listing oluşturmaz)."""
+    data = request.json or {}
+    job_id = data.get("job_id", "")
+    if job_id not in JOBS:
+        return jsonify(ok=False, error="Geçersiz iş."), 400
+    prices = _cost_to_prices(job_id, int(data.get("section_id", 0) or 0), data.get("sizes"))
+    return jsonify(ok=True, prices=prices)
+
+
 @app.route("/api/start", methods=["POST"])
 def api_start():
     data = request.json or {}
     job_id = data.get("job_id", "")
     section_id = int(data.get("section_id", 0) or 0)
 
-    # sizes: [{"label": str, "price": float}, ...] — sadece geçerli fiyatlılar alınır
-    priced_sizes = []
-    for s in (data.get("sizes") or []):
-        try:
-            p = float(s.get("price", 0) or 0)
-        except (ValueError, TypeError):
-            p = 0
-        label = str(s.get("label", "")).strip()
-        if label and p > 0:
-            priced_sizes.append({"label": label, "price": round(p, 2)})
-
     if job_id not in JOBS:
         return jsonify(ok=False, error="Geçersiz iş."), 400
+
+    # sizes: [{"label": str, "cost": float}, ...] — maliyetten fiyat hesaplanır
+    priced = _cost_to_prices(job_id, section_id, data.get("sizes"))
+    priced_sizes = [{"label": p["label"], "price": p["price"]} for p in priced]
     if not priced_sizes:
-        return jsonify(ok=False, error="En az bir ölçü için geçerli fiyat girin."), 400
+        return jsonify(ok=False, error="En az bir ölçü için geçerli maliyet girin."), 400
 
     threading.Thread(target=_run, args=(job_id, priced_sizes, section_id), daemon=True).start()
     return jsonify(ok=True)

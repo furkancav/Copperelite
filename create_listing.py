@@ -124,6 +124,29 @@ def calc_target_price(cost: float, en_cm: float, boy_cm: float, yuk_cm: float,
     return {"price": round(price, 2), "desi": desi,
             "shipping": round(shipping, 2), "discounted": round(discounted, 2)}
 
+
+def derive_dimensions(section_name: str, w_cm: float, h_cm: float) -> tuple[float, float, float]:
+    """Görünen en/boy'dan desi için 3 fiziksel boyut (en, derinlik, yükseklik) türetir —
+    tablodaki ölçü kurallarına göre, ürün kategorisine bağlı."""
+    code = SECTION_TO_CATEGORY.get(section_name, "DGR")
+    if code in ("PDL", "SCN"):            # lamba/aplik: silindir → çap x çap x yükseklik
+        return w_cm, w_cm, h_cm
+    if code in ("BBT", "BWL"):            # kuş havuzu/kase: çap x çap x (çap*0.35)
+        return w_cm, w_cm, max(1, round(w_cm * 0.35))
+    if code in ("SNK", "SHW"):            # lavabo/duş: en x derinlik x yükseklik(15 varsayım)
+        return w_cm, h_cm, 15
+    if code == "MIR":                     # ayna: ince
+        return w_cm, h_cm, 3
+    return w_cm, h_cm, min(w_cm, h_cm)    # diğer/fallback
+
+
+def price_for_size(cost: float, section_name: str, w_cm: float, h_cm: float,
+                   ddp_goods: float | None = None, other: float = 0.0) -> dict:
+    """Bir varyasyonun maliyet + ölçüsünden hedef fiyatı hesaplar (kategori marjı otomatik)."""
+    en, derinlik, yuk = derive_dimensions(section_name, w_cm, h_cm)
+    margin = category_margin(section_name)
+    return calc_target_price(cost, en, derinlik, yuk, margin, ddp_goods=ddp_goods, other=other)
+
 # shape → [(label, inch_val), ...]
 SIZE_VARIATIONS: dict[str, list[tuple[str, int]]] = {
     "round": [
@@ -315,7 +338,8 @@ Return only valid JSON, no markdown."""
                 wc, hc = round(w * 2.54), round(h * 2.54)
                 inch = f"{_num(w)} x {_num(h)} in"
                 cm = f"{wc} x {hc} cm"
-                sizes.append({"inch": inch, "cm": cm, "label": f"{inch} / {cm}"[:45]})
+                sizes.append({"inch": inch, "cm": cm, "label": f"{inch} / {cm}"[:45],
+                              "w_cm": wc, "h_cm": hc})
             if sizes:
                 return sizes
     except Exception as e:
