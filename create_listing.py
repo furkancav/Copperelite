@@ -73,13 +73,30 @@ LISTING_FEE    = 0.20      # Etsy listeleme/yenileme
 PAYMENT_FIXED  = 0.25      # Etsy payment sabit
 TRANSACTION_FEE= 0.065     # Etsy transaction %
 PAYMENT_PCT    = 0.03      # Etsy payment %
-AD_SHARE       = 0.10      # reklam payı %
+AD_SHARE       = 0.05      # reklam payı % (2026-07-05: %10→%5 düşürüldü)
 OFFSITE_ADS    = 0.0       # offsite ads % (varsayılan 0)
 LIST_DISCOUNT  = 0.30      # Etsy liste indirimi %
 DEFAULT_MARGIN = 0.50      # kategori bulunamazsa hedef net kâr
 
 CATEGORY_MARGINS = {"SNK":0.45,"PDL":0.40,"SCN":0.39,"FAC":0.30,"SHW":0.40,
                     "BBT":0.40,"SPA":0.40,"MIR":0.55,"DEC":0.45,"BWL":0.40,"DGR":0.50}
+# NOT: CATEGORY_MARGINS artık fiyat hesabında KULLANILMIYOR (referans için duruyor).
+# 2026-07-05 kalibrasyonu: marj ölçüye (desi) göre %30 → %20 arasında kayar —
+# küçük ürün yüksek marj, büyük ürün düşük marj (pazar rekabeti için).
+MARGIN_MAX      = 0.30   # desi ≤ MARGIN_DESI_LO olan küçük ürünler
+MARGIN_MIN      = 0.20   # desi ≥ MARGIN_DESI_HI olan büyük ürünler
+MARGIN_DESI_LO  = 2
+MARGIN_DESI_HI  = 15
+
+
+def margin_for_desi(desi: int) -> float:
+    """Ölçek bazlı hedef net kâr: küçük ürün %30, büyük ürün %20, arası doğrusal."""
+    if desi <= MARGIN_DESI_LO:
+        return MARGIN_MAX
+    if desi >= MARGIN_DESI_HI:
+        return MARGIN_MIN
+    t = (desi - MARGIN_DESI_LO) / (MARGIN_DESI_HI - MARGIN_DESI_LO)
+    return round(MARGIN_MAX - t * (MARGIN_MAX - MARGIN_MIN), 4)
 
 # Pazar fiyat tavanları (Etsy rakip araştırması 2026-07): hesaplanan liste fiyatı
 # bu bandı aşarsa satış şansı ciddi düşer → UI'da uyarı gösterilir (bloklamaz).
@@ -170,10 +187,14 @@ def derive_dimensions(section_name: str, w_cm: float, h_cm: float) -> tuple[floa
 
 def price_for_size(cost: float, section_name: str, w_cm: float, h_cm: float,
                    ddp_goods: float | None = None, other: float = 0.0) -> dict:
-    """Bir varyasyonun maliyet + ölçüsünden hedef fiyatı hesaplar (kategori marjı otomatik)."""
+    """Bir varyasyonun maliyet + ölçüsünden hedef fiyatı hesaplar.
+    Marj ölçeğe göre kayar: küçük ürün %30 → büyük ürün %20 (desi bazlı)."""
     en, derinlik, yuk = derive_dimensions(section_name, w_cm, h_cm)
-    margin = category_margin(section_name)
-    return calc_target_price(cost, en, derinlik, yuk, margin, ddp_goods=ddp_goods, other=other)
+    desi = _desi(en, derinlik, yuk)
+    margin = margin_for_desi(desi)
+    result = calc_target_price(cost, en, derinlik, yuk, margin, ddp_goods=ddp_goods, other=other)
+    result["margin"] = margin
+    return result
 
 
 # Tahmini ÜRETİCİ maliyeti — kullanıcının pazarlık geçmişinden kalibre edildi.
