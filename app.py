@@ -221,9 +221,11 @@ def _cost_to_prices(job_id: str, section_id: int, items: list) -> list[dict]:
             w_cm, h_cm = m.get("w_cm", 0), m.get("h_cm", 0)
             en, boy, yuk = cl.derive_dimensions(section_name, w_cm, h_cm)
             r = cl.price_for_size(cost, section_name, w_cm, h_cm)
+            flags = cl.price_flags(section_name, r["price"], r["desi"])
             out.append({"label": label, "price": r["price"],
                         "desi": r["desi"], "shipping": r["shipping"],
-                        "cost": cost, "en": en, "boy": boy, "yuk": yuk})
+                        "cost": cost, "en": en, "boy": boy, "yuk": yuk,
+                        **flags})
     return out
 
 

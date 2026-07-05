@@ -80,6 +80,34 @@ DEFAULT_MARGIN = 0.50      # kategori bulunamazsa hedef net kâr
 
 CATEGORY_MARGINS = {"SNK":0.45,"PDL":0.40,"SCN":0.39,"FAC":0.30,"SHW":0.40,
                     "BBT":0.40,"SPA":0.40,"MIR":0.55,"DEC":0.45,"BWL":0.40,"DGR":0.50}
+
+# Pazar fiyat tavanları (Etsy rakip araştırması 2026-07): hesaplanan liste fiyatı
+# bu bandı aşarsa satış şansı ciddi düşer → UI'da uyarı gösterilir (bloklamaz).
+MARKET_PRICE_MAX = {
+    "SNK": 650,   # vessel/lavabo pazarı ~$214-598
+    "PDL": 450,   # hammered pendant ~$150-400
+    "SCN": 420,
+    "FAC": 350,
+    "SHW": 520,
+    "BBT": 700,
+    "SPA": 550,
+    "MIR": 650,
+    "DEC": 400,
+    "BWL": 250,
+    "DGR": 500,
+}
+HIGH_DESI_THRESHOLD = 10   # bu desinin üstünde FedEx Express kargo fiyatı patlar
+
+
+def price_flags(section_name: str, price: float, desi: int) -> dict:
+    """Fiyat/kargo sağlık kontrolü — pazar üstü mü, kargo desi'si yüksek mi?"""
+    code = SECTION_TO_CATEGORY.get(section_name, "DGR")
+    market_max = MARKET_PRICE_MAX.get(code, 500)
+    return {
+        "over_market": price > market_max,
+        "market_max": market_max,
+        "high_desi": desi > HIGH_DESI_THRESHOLD,
+    }
 # CuLister mağaza bölümü → kategori kodu
 SECTION_TO_CATEGORY = {
     "Copper Sink":"SNK","Kitchen Sink":"SNK","Bathroom Sink":"SNK",

@@ -642,16 +642,19 @@ function renderSizes(sizes) {
     const label = s.label || `${s.inch || ''} / ${s.cm || ''}`;
     const row = document.createElement('div');
     row.setAttribute('data-label', label);
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid rgba(128,128,128,.18);';
+    row.style.cssText = 'padding:9px 0;border-bottom:1px solid rgba(128,128,128,.18);';
     row.innerHTML = `
-      <span style="flex:1;font-size:14px;font-weight:500;">${label}</span>
-      <span class="cost-hint" title="Tahmini üretici maliyeti — tıkla, maliyet kutusuna yazılsın" style="width:78px;text-align:center;font-size:12px;color:var(--muted2);cursor:pointer;">—</span>
-      <div class="input-wrap" style="width:98px;">
-        <span class="input-prefix">$</span>
-        <input type="number" class="size-cost" data-label="${label.replace(/"/g,'&quot;')}"
-               placeholder="maliyet" min="0" step="0.01" inputmode="decimal">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="flex:1;font-size:14px;font-weight:500;">${label}</span>
+        <span class="cost-hint" title="Tahmini üretici maliyeti — tıkla, maliyet kutusuna yazılsın" style="width:78px;text-align:center;font-size:12px;color:var(--muted2);cursor:pointer;">—</span>
+        <div class="input-wrap" style="width:98px;">
+          <span class="input-prefix">$</span>
+          <input type="number" class="size-cost" data-label="${label.replace(/"/g,'&quot;')}"
+                 placeholder="maliyet" min="0" step="0.01" inputmode="decimal">
+        </div>
+        <span class="size-price-out" style="width:84px;text-align:right;font-size:14px;color:var(--cu2);font-weight:700;">—</span>
       </div>
-      <span class="size-price-out" style="width:84px;text-align:right;font-size:14px;color:var(--cu2);font-weight:700;">—</span>`;
+      <div class="size-warn" style="display:none;font-size:11.5px;line-height:1.5;padding:4px 0 0;"></div>`;
     wrap.appendChild(row);
   });
   wrap.querySelectorAll('.size-cost').forEach(inp => inp.addEventListener('input', debouncePrice));
@@ -706,12 +709,26 @@ async function fetchPrices() {
     });
     const data = await r.json();
     if (!data.ok) return;
-    const map = {}; data.prices.forEach(p => map[p.label] = p.price);
+    const map = {}; data.prices.forEach(p => map[p.label] = p);
     wrap.querySelectorAll('[data-label]').forEach(row => {
       const out = row.querySelector('.size-price-out');
+      const warn = row.querySelector('.size-warn');
       if (!out) return;
-      const pr = map[row.getAttribute('data-label')];
-      out.textContent = pr ? '$' + pr.toFixed(2) : '—';
+      const p = map[row.getAttribute('data-label')];
+      out.textContent = p ? '$' + p.price.toFixed(2) : '—';
+      if (!warn) return;
+      const msgs = [];
+      if (p && p.over_market) {
+        msgs.push(`<span style="color:#f87171;">⚠ Pazar üstü — bu kategoride tavan ~$${p.market_max}. Bu fiyattan satış zor; ölçüyü atla ya da maliyeti/kargoyu düşür.</span>`);
+        out.style.color = '#f87171';
+      } else if (p) {
+        out.style.color = 'var(--cu2)';
+      }
+      if (p && p.high_desi) {
+        msgs.push(`<span style="color:#fbbf24;">📦 Desi ${p.desi} → kargo $${p.shipping.toFixed(0)}. Büyük ölçü — ekonomi kargo düşün.</span>`);
+      }
+      warn.innerHTML = msgs.join('<br>');
+      warn.style.display = msgs.length ? 'block' : 'none';
     });
   } catch (e) {}
 }
