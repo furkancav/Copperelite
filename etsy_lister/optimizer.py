@@ -53,7 +53,7 @@ def _via_openai(api_key: str, prompt: str, model: str = "gpt-4o-mini") -> dict:
     return json.loads(resp.choices[0].message.content)
 
 
-def _via_gemini(api_key: str, prompt: str, model: str = "gemini-1.5-flash") -> dict:
+def _via_gemini(api_key: str, prompt: str, model: str = "gemini-flash-latest") -> dict:
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
            f"{model}:generateContent?key={api_key}")
     body = {

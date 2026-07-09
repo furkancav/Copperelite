@@ -393,7 +393,7 @@ def analyze_image(image_path: str) -> dict:
 Return only valid JSON, no markdown, no explanation."""
 
     resp = _gemini(
-        "models/gemini-2.5-flash:generateContent",
+        "models/gemini-flash-latest:generateContent",
         {
             "contents": [{"parts": [
                 {"text": prompt},
@@ -468,7 +468,7 @@ def _image_wh_ratio(info: dict, image_path: str | None) -> float | None:
              {"text": f'Look at this {ptype}. Measure the product only (ignore background, cable, stand). '
                       f'Return ONLY JSON: {{"ratio_w_to_h": <outer width divided by outer height, e.g. 0.75>}}'}]
     try:
-        resp = _gemini("models/gemini-2.5-flash:generateContent",
+        resp = _gemini("models/gemini-flash-latest:generateContent",
                        {"contents": [{"parts": parts}], "generationConfig": {"temperature": 0.1}})
         data = _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
         r = float(data.get("ratio_w_to_h", 0) or 0)
@@ -606,8 +606,8 @@ def _compose_prompt(scene_type: str, scene_desc: str) -> str:
     return PRODUCT_LOCK + scene_desc + rules
 
 _GEMINI_IMAGE_MODELS = [
-    "models/gemini-2.5-flash-preview-image-generation",
-    "models/gemini-2.0-flash-preview-image-generation",
+    "models/gemini-2.5-flash-image",
+    "models/gemini-3.1-flash-image",
 ]
 
 
@@ -825,7 +825,7 @@ All tags lowercase, no duplicates, tailored to THIS specific product ({info.get(
 Return only valid JSON, no markdown."""
 
     resp = _gemini(
-        "models/gemini-2.5-flash:generateContent",
+        "models/gemini-flash-latest:generateContent",
         {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.7},
