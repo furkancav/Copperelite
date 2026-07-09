@@ -204,7 +204,7 @@ def price_for_size(cost: float, section_name: str, w_cm: float, h_cm: float,
 # maliyet ≈ K(kategori) × (en büyük ölçü cm) ^ 1.72   (bakır yüzey + işçilik ölçeği)
 # Örnek doğrulama (avize PDL, K=0.40): 25cm→101, 35→153, 45→239, 60→395  (gerçek: 100/150/250/450)
 COST_K = {
-    "PDL": 0.55,  # avize/lamba — GERÇEK üretici teklifi 25cm=$140'a kalibre
+    "PDL": 0.55,  # (PDL için ARTIK KULLANILMIYOR — maliyet PDL_COST_BY_WIDTH tablosundan gelir)
     "SCN": 0.50,  # aplik (2'li set)
     "SHW": 0.74,  # duş başlığı (tesisat/test — üst limit)
     "FAC": 0.50,  # musluk
@@ -217,17 +217,39 @@ COST_K = {
 }
 COST_EXP = 1.72
 
+# Sarkıt lamba (PDL): üreticinin GERÇEK fiyat tablosu (EN cm → USD maliyet), 2026-07-07.
+# Bu kategoride formül yerine birebir bu tablo kullanılır (veriler düzensiz artıyor).
+PDL_COST_BY_WIDTH = {25: 85, 35: 110, 45: 240, 60: 350}
+
+
+def _interp_cost(width: float, table: dict) -> float:
+    """Ölçü→maliyet tablosunda doğrusal ara-değer (aralık dışında en yakın segmentten uzatır)."""
+    pts = sorted(table.items())
+    if width <= pts[0][0]:
+        (x0, y0), (x1, y1) = pts[0], pts[1]
+    elif width >= pts[-1][0]:
+        (x0, y0), (x1, y1) = pts[-2], pts[-1]
+    else:
+        (x0, y0), (x1, y1) = pts[0], pts[1]
+        for i in range(len(pts) - 1):
+            if pts[i][0] <= width <= pts[i + 1][0]:
+                (x0, y0), (x1, y1) = pts[i], pts[i + 1]
+                break
+    return y0 + (y1 - y0) * (width - x0) / (x1 - x0)
+
 
 def suggest_cost(section_name: str, en_cm: float, boy_cm: float, yuk_cm: float):
     """Kategori + ölçüden tahmini üretici maliyeti (USD). Pazarlık için başlangıç
     referansı — kesin değil. En büyük boyutu baz alır, temiz rakama yuvarlar."""
     code = SECTION_TO_CATEGORY.get(section_name, "DGR")
-    k = COST_K.get(code, 0.50)
     # baş ölçü (en/çap) — kullanıcı "25cm model" derken bunu kastediyor
     dim = (en_cm or 0) or max(boy_cm or 0, yuk_cm or 0)
     if dim <= 0:
         return None
-    raw = k * (dim ** COST_EXP)
+    if code == "PDL":
+        raw = _interp_cost(dim, PDL_COST_BY_WIDTH)   # üreticinin gerçek fiyat tablosu
+    else:
+        raw = COST_K.get(code, 0.50) * (dim ** COST_EXP)
     if raw < 100:
         return int(round(raw / 5.0) * 5)     # <100 → 5'e yuvarla
     return int(round(raw / 10.0) * 10)       # ≥100 → 10'a yuvarla
@@ -459,7 +481,7 @@ def _num(x) -> str:
 
 # Kategori bazlı ABD-popüler BİRİNCİL ölçüler (en/çap/uzunluk, cm) — 5 boyut
 SIZE_PRESETS_CM = {
-    "PDL": [20, 25, 30, 41, 51],   # avize/lamba çapı (8,10,12,16,20 in)
+    "PDL": [25, 35, 45, 60],       # sarkıt lamba EN (cm) — üretici standart ölçüleri (~10/14/18/24 in)
     "SCN": [23, 28, 33, 41, 46],   # aplik
     "SHW": [20, 25, 30, 36, 41],   # duş başlığı çapı (8-16 in)
     "FAC": [10, 13, 15, 18, 20],   # musluk
