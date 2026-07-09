@@ -27,6 +27,9 @@ if OPENAI_KEY.startswith("BURAYA") or OPENAI_KEY.lower().startswith("your"):
     OPENAI_KEY = ""
 # Görsel kalitesi: "low" | "medium" | "high" (env ile değiştirilebilir)
 OPENAI_IMAGE_QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "medium").strip().lower()
+# Metin/görsel-analiz modeli: OpenAI flagship (birincil), Gemini yedek.
+# İstersen env ile düşür: OPENAI_TEXT_MODEL=gpt-5.4-mini (daha ucuz).
+OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-5.4").strip()
 # DENEME MODU: kaç görsel üretilsin (token tasarrufu). Şu an 1; normalde 10.
 # Render'da MAX_IMAGES=10 env'i ile ya da bu satırı 10 yaparak geri açılır.
 MAX_IMAGES = int(os.getenv("MAX_IMAGES", "1"))
@@ -344,6 +347,59 @@ def _parse_json(text: str) -> dict:
     return json.loads(text.strip())
 
 
+def _openai_chat_json(prompt: str, image_b64: str | None = None,
+                      image_mime: str = "image/jpeg", temperature: float = 0.2,
+                      retries: int = 4) -> str:
+    """OpenAI chat completions (flagship = OPENAI_TEXT_MODEL). Vision + JSON.
+    Ham JSON metni döndürür; geçici hatalarda (429/5xx) tekrar dener."""
+    content: list = [{"type": "text", "text": prompt}]
+    if image_b64:
+        content.append({"type": "image_url",
+                        "image_url": {"url": f"data:{image_mime};base64,{image_b64}"}})
+    body = {
+        "model": OPENAI_TEXT_MODEL,
+        "messages": [{"role": "user", "content": content}],
+        "temperature": temperature,
+        "response_format": {"type": "json_object"},
+    }
+    transient = {429, 500, 502, 503, 504}
+    last_err = ""
+    for attempt in range(retries):
+        try:
+            r = requests.post(
+                f"{OPENAI_BASE}/chat/completions",
+                headers={"Authorization": f"Bearer {OPENAI_KEY}", "Content-Type": "application/json"},
+                json=body, timeout=180,
+            )
+        except requests.RequestException as e:
+            last_err = f"bağlantı hatası: {e}"
+            time.sleep(min(2 ** attempt, 15)); continue
+        if r.ok:
+            return r.json()["choices"][0]["message"]["content"]
+        last_err = f"OpenAI {r.status_code}: {r.text[:200]}"
+        if r.status_code in transient and attempt < retries - 1:
+            time.sleep(min(2 ** attempt, 15)); continue
+        raise RuntimeError(last_err)
+    raise RuntimeError(f"OpenAI {retries} denemede yanıt vermedi. Son: {last_err}")
+
+
+def _llm_json(prompt: str, image_b64: str | None = None,
+              image_mime: str = "image/jpeg", temperature: float = 0.2) -> dict:
+    """Metin/vision üretimi — önce OpenAI flagship, hata olursa Gemini yedeği.
+    Parse edilmiş dict döndürür."""
+    if OPENAI_KEY:
+        try:
+            return _parse_json(_openai_chat_json(prompt, image_b64, image_mime, temperature))
+        except Exception as e:
+            print(f"  [OpenAI metin hatası → Gemini yedeğine düşülüyor: {str(e)[:90]}]", flush=True)
+    parts: list = [{"text": prompt}]
+    if image_b64:
+        parts.append({"inline_data": {"mime_type": image_mime, "data": image_b64}})
+    resp = _gemini("models/gemini-flash-latest:generateContent",
+                   {"contents": [{"parts": parts}], "generationConfig": {"temperature": temperature}})
+    return _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
+
+
 # ── 1. Görsel analizi ─────────────────────────────────────────────────────────
 
 def _to_jpeg_if_needed(image_path: str) -> tuple[str, bool]:
@@ -392,17 +448,7 @@ def analyze_image(image_path: str) -> dict:
 }
 Return only valid JSON, no markdown, no explanation."""
 
-    resp = _gemini(
-        "models/gemini-flash-latest:generateContent",
-        {
-            "contents": [{"parts": [
-                {"text": prompt},
-                {"inline_data": {"mime_type": mime, "data": img_b64}},
-            ]}],
-            "generationConfig": {"temperature": 0.1},
-        },
-    )
-    return _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
+    return _llm_json(prompt, img_b64, mime, temperature=0.1)
 
 
 def _num(x) -> str:
@@ -464,13 +510,10 @@ def _image_wh_ratio(info: dict, image_path: str | None) -> float | None:
     except Exception:
         return None
     ptype = info.get("product_type") or "product"
-    parts = [{"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
-             {"text": f'Look at this {ptype}. Measure the product only (ignore background, cable, stand). '
-                      f'Return ONLY JSON: {{"ratio_w_to_h": <outer width divided by outer height, e.g. 0.75>}}'}]
+    ratio_prompt = (f'Look at this {ptype}. Measure the product only (ignore background, cable, stand). '
+                    f'Return ONLY JSON: {{"ratio_w_to_h": <outer width divided by outer height, e.g. 0.75>}}')
     try:
-        resp = _gemini("models/gemini-flash-latest:generateContent",
-                       {"contents": [{"parts": parts}], "generationConfig": {"temperature": 0.1}})
-        data = _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
+        data = _llm_json(ratio_prompt, img_b64, "image/jpeg", temperature=0.1)
         r = float(data.get("ratio_w_to_h", 0) or 0)
         return r if r > 0 else None
     except Exception:
@@ -824,14 +867,7 @@ AVOID broad decor tags like "copper home decor", "rustic decor", "farmhouse deco
 All tags lowercase, no duplicates, tailored to THIS specific product ({info.get('product_type', 'product')}). Never exceed 20 characters on any tag.
 Return only valid JSON, no markdown."""
 
-    resp = _gemini(
-        "models/gemini-flash-latest:generateContent",
-        {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.7},
-        },
-    )
-    result = _parse_json(resp["candidates"][0]["content"]["parts"][0]["text"])
+    result = _llm_json(prompt, temperature=0.7)
     # Ölçüleri Gemini'ye bırakma — seçilen ölçüleri DETERMINISTIK ekle (varyasyonlarla birebir aynı)
     if size_labels:
         block = "\n\n✦ AVAILABLE SIZES (Width x Height) ✦\n" + "\n".join(f"• {lbl}" for lbl in size_labels)

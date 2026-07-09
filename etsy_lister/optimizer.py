@@ -40,7 +40,7 @@ def _clean_tags(tags: list[str], n: int) -> list[str]:
     return out
 
 
-def _via_openai(api_key: str, prompt: str, model: str = "gpt-4o-mini") -> dict:
+def _via_openai(api_key: str, prompt: str, model: str = "gpt-5.4") -> dict:
     from openai import OpenAI
     client = OpenAI(api_key=api_key)
     resp = client.chat.completions.create(
