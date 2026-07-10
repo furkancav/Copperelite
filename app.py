@@ -248,11 +248,20 @@ def api_suggest_costs():
     if job_id not in JOBS:
         return jsonify(ok=False, error="Geçersiz iş."), 400
     section_name = _section_name(int(data.get("section_id", 0) or 0))
-    out = []
+    info = JOBS[job_id].get("info") or {}      # form_family / shape → doğru fiyat tablosu
+    out, family = [], ""
     for s in JOBS[job_id].get("sizes", []):
         en, boy, yuk = cl.derive_dimensions(section_name, s.get("w_cm", 0), s.get("h_cm", 0))
-        out.append({"label": s["label"], "cost": cl.suggest_cost(section_name, en, boy, yuk)})
-    return jsonify(ok=True, costs=out)
+        d = cl.suggest_cost_detail(section_name, en, boy, yuk, info) or {}
+        family = d.get("family_tr") or family
+        out.append({
+            "label": s["label"],
+            "cost": d.get("cost"),
+            "target_low": d.get("target_low"),    # pazarlık hedefi (−%15)
+            "target_high": d.get("target_high"),  # pazarlık hedefi (−%10)
+            "max_ok": d.get("max_ok"),            # kabul edilebilir üst limit (+%12)
+        })
+    return jsonify(ok=True, costs=out, family=family)
 
 
 @app.route("/api/start", methods=["POST"])

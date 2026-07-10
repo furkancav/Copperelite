@@ -200,34 +200,66 @@ def price_for_size(cost: float, section_name: str, w_cm: float, h_cm: float,
     return result
 
 
-# Tahmini ÜRETİCİ maliyeti — kullanıcının pazarlık geçmişinden kalibre edildi.
-# maliyet ≈ K(kategori) × (en büyük ölçü cm) ^ 1.72   (bakır yüzey + işçilik ölçeği)
-# Örnek doğrulama (avize PDL, K=0.40): 25cm→101, 35→153, 45→239, 60→395  (gerçek: 100/150/250/450)
-COST_K = {
-    "PDL": 0.55,  # (PDL için ARTIK KULLANILMIYOR — maliyet PDL_COST_BY_WIDTH tablosundan gelir)
-    "SCN": 0.50,  # aplik (2'li set)
-    "SHW": 0.74,  # duş başlığı (tesisat/test — üst limit)
-    "FAC": 0.50,  # musluk
-    "SNK": 0.50,  # lavabo
-    "BBT": 0.68,  # kuş havuzu / bahçe (çift katman bakır)
-    "BWL": 0.47,  # kase
-    "MIR": 0.38,  # ayna (çerçeve)
-    "DEC": 0.47,  # dekor
-    "DGR": 0.50,  # diğer
-}
-COST_EXP = 1.72
+# ══════════════════════════════════════════════════════════════════════════════
+# ÜRETİCİ MALİYET MODELİ (kullanıcının gerçek üretici verilerinden — 2026-07-07)
+#
+# Bu değerler ÜRETİCİ MALİYETİ / teklif tahminidir — Etsy satış fiyatı DEĞİLDİR,
+# kâr marjı içermez. Satış fiyatı ayrıca calc_target_price() ile hesaplanır.
+#
+# EN ÖNEMLİ KURAL: Lambalarda fiyat sadece ÇAPA göre verilmez — önce FORM AİLESİ
+# belirlenir. Aynı 60 cm, basık konikse ~200, spiralse ~475 olabilir.
+# 35 cm fiyatı oynaktır (baz alma); 45 cm gerçek premium geçiş noktasıdır.
+# ══════════════════════════════════════════════════════════════════════════════
 
-# Sarkıt lamba (PDL): üreticinin GERÇEK fiyat tablosu (EN cm → USD maliyet), 2026-07-07.
-# Bu kategoride formül yerine birebir bu tablo kullanılır (veriler düzensiz artıyor).
-PDL_COST_BY_WIDTH = {25: 85, 35: 110, 45: 240, 60: 350}
+# ── Lamba form aileleri: ÇAP(cm) → üretici maliyeti (USD) ──
+LAMP_FAMILY_PRICES = {
+    "very_flat":     {25: 50,  35: 60,  45: 100, 60: 150},  # A  çok basık / çok sade / az malzeme
+    "shallow_cone":  {25: 60,  35: 75,  45: 120, 60: 200},  # B  basık konik / sade geniş
+    "standard_dome": {25: 80,  35: 120, 45: 230, 60: 375},  # C  standart dome (baz aile)
+    "deep_dome":     {25: 90,  35: 135, 45: 260, 60: 400},  # D  dolu / patinalı / boyunlu
+    "spiral_ribbed": {25: 115, 35: 165, 45: 315, 60: 475},  # E  spiral / kaburgalı / özel form
+}
+# F — uzun silindir (gövde > çapın 2 katı): ÇAP(cm) → fiyat. Dome mantığı UYGULANMAZ.
+LONG_CYLINDER_PRICES = {15: 100, 20: 200, 25: 350}
+
+LAMP_FAMILY_TR = {
+    "very_flat":     "çok basık / çok sade",
+    "shallow_cone":  "basık konik",
+    "standard_dome": "standart dome / yarım kubbe",
+    "deep_dome":     "dolu / patinalı / boyunlu dome",
+    "spiral_ribbed": "spiral / kaburgalı / özel form",
+    "long_cylinder": "uzun silindir",
+}
+
+# ── Diğer ürün tipleri (ölçü → USD üretici maliyeti) ──
+SINK_ROUND_IN   = {13: 150, 14: 170, 16: 200, 17: 225, 18: 255, 20: 315}  # round vessel, ÇAP (inch)
+SINK_OVAL_IN    = {18: 210, 20: 240, 21: 270, 23: 320, 24: 360}           # oval vessel, UZUNLUK (inch)
+SINK_RECT_IN    = {16: 230, 18: 275, 20: 330, 22: 395, 24: 460}           # dikdörtgen vessel (işçilik ↑)
+SINK_KITCHEN_IN = {24: 390, 27: 480, 30: 590, 33: 720, 36: 850}           # kitchen / drop-in
+BIRDBATH_CM     = {30: 160, 40: 245, 50: 365, 60: 525}   # TEK katman; çift katman ≈ ×1.45
+MIRROR_H_IN     = {32: 250, 36: 340, 40: 400, 48: 590, 60: 920}           # ayna, YÜKSEKLİK (inch)
+SHELF_CM        = {25: 65, 30: 75, 35: 90, 40: 105, 50: 135, 60: 160, 70: 205, 80: 255}
+SCONCE_SET_CM   = {25: 125, 35: 175, 45: 245}            # aplik: 2'Lİ SET toplam fiyatı
+LANTERN_H_CM    = {20: 95, 30: 145, 35: 180, 40: 225}    # fener, YÜKSEKLİK (cm)
+SHOWER_D_IN     = {8: 140, 10: 185, 12: 250, 14: 330, 16: 430}  # duş başlığı, ÇAP (inch)
+
+# Tablosu olmayan kategoriler için eski üstel formül (yedek)
+COST_K = {"FAC": 0.50, "BWL": 0.47, "DEC": 0.47, "DGR": 0.50, "SPA": 0.50}
+COST_EXP = 1.72
+_INCH = 2.54
 
 
 def _interp_cost(width: float, table: dict) -> float:
-    """Ölçü→maliyet tablosunda doğrusal ara-değer (aralık dışında en yakın segmentten uzatır)."""
+    """Ölçü→maliyet tablosunda doğrusal ara-değer.
+    Aralık ÜSTÜNDE son segmentten uzatır; aralık ALTINDA ilk noktadan orantısal
+    ölçekler (doğrusal uzatma negatif fiyat üretebiliyordu)."""
     pts = sorted(table.items())
+    if width <= 0:
+        return 0.0
     if width <= pts[0][0]:
-        (x0, y0), (x1, y1) = pts[0], pts[1]
-    elif width >= pts[-1][0]:
+        x0, y0 = pts[0]
+        return y0 * (width / x0)
+    if width >= pts[-1][0]:
         (x0, y0), (x1, y1) = pts[-2], pts[-1]
     else:
         (x0, y0), (x1, y1) = pts[0], pts[1]
@@ -235,24 +267,139 @@ def _interp_cost(width: float, table: dict) -> float:
             if pts[i][0] <= width <= pts[i + 1][0]:
                 (x0, y0), (x1, y1) = pts[i], pts[i + 1]
                 break
-    return y0 + (y1 - y0) * (width - x0) / (x1 - x0)
+    return max(0.0, y0 + (y1 - y0) * (width - x0) / (x1 - x0))
 
 
-def suggest_cost(section_name: str, en_cm: float, boy_cm: float, yuk_cm: float):
-    """Kategori + ölçüden tahmini üretici maliyeti (USD). Pazarlık için başlangıç
-    referansı — kesin değil. En büyük boyutu baz alır, temiz rakama yuvarlar."""
-    code = SECTION_TO_CATEGORY.get(section_name, "DGR")
-    # baş ölçü (en/çap) — kullanıcı "25cm model" derken bunu kastediyor
-    dim = (en_cm or 0) or max(boy_cm or 0, yuk_cm or 0)
-    if dim <= 0:
+def _info_text(info: dict | None) -> str:
+    vals = []
+    for v in (info or {}).values():
+        if isinstance(v, str):
+            vals.append(v)
+        elif isinstance(v, (list, tuple)):
+            vals.extend(str(x) for x in v)
+    return " ".join(vals).lower()
+
+
+def _refine_code(code: str, info: dict | None) -> str:
+    """Genel bölümde (Wall Decor/Garden) duran aplik/fener/raf/ayna gibi ürünleri
+    görsel analizinden tanıyıp doğru fiyat tablosuna yönlendirir."""
+    if code not in ("DEC", "DGR") or not info:
+        return code
+    t = ((info.get("product_type") or "") + " " + (info.get("product_name") or "")).lower()
+    for words, c in [
+        (("sconce", "wall light", "wall lamp"), "SCN"),
+        (("lantern",), "LTN"),
+        (("shelf", "towel rail"), "SHF"),
+        (("mirror",), "MIR"),
+        (("bird bath", "birdbath", "water bowl", "fountain"), "BBT"),
+        (("pendant", "chandelier", "lamp", "light"), "PDL"),
+    ]:
+        if any(w in t for w in words):
+            return c
+    return code
+
+
+def lamp_family(info: dict | None, en_cm: float, yuk_cm: float) -> str:
+    """Lamba form ailesi. Önce görsel analizinden (`form_family`), yoksa
+    yükseklik/çap oranından tahmin eder. Spiral/kaburga yalnızca görselden gelir."""
+    fam = str((info or {}).get("form_family") or "").strip().lower()
+    if fam in LAMP_FAMILY_TR:
+        return fam
+    r = (yuk_cm or 0) / (en_cm or 1)
+    if r >= 2.0:
+        return "long_cylinder"    # gövde çapın 2 katından uzun
+    if r <= 0.28:
+        return "very_flat"        # basık disk / UFO (%22-25)
+    if r <= 0.42:
+        return "shallow_cone"     # basık konik (%35-40)
+    if r <= 0.57:
+        return "standard_dome"    # standart dome (%45-55)
+    return "deep_dome"            # yüksek / boyunlu dome (%58-75)
+
+
+def _premium_finish(info: dict | None) -> bool:
+    """Patina / iki renkli / oksit geçişli yüzey → uzun silindirde +%15 işçilik payı."""
+    s = _info_text(info)
+    return any(w in s for w in ("patina", "oxidiz", "two-tone", "two tone", "antique", "verdigris"))
+
+
+def _round_cost(raw: float):
+    """5'in katına yuvarlar — tablo değerlerini bozmadan 'üretici fiyatı' gibi görünür."""
+    if not raw or raw <= 0:
         return None
+    return int(round(raw / 5.0) * 5)
+
+
+def suggest_cost(section_name: str, en_cm: float, boy_cm: float, yuk_cm: float,
+                 info: dict | None = None):
+    """Tahmini ÜRETİCİ maliyeti (USD) — pazarlık başlangıç referansı, kesin değil.
+    Lambalarda FORM AİLESİNE, diğer ürünlerde tipe özel tabloya göre hesaplar.
+    `info` = analyze_image() çıktısı (form_family, shape, product_type...)."""
+    code = _refine_code(SECTION_TO_CATEGORY.get(section_name, "DGR"), info)
+    en_cm = float(en_cm or 0); boy_cm = float(boy_cm or 0); yuk_cm = float(yuk_cm or 0)
+    if max(en_cm, boy_cm, yuk_cm) <= 0:
+        return None
+
     if code == "PDL":
-        raw = _interp_cost(dim, PDL_COST_BY_WIDTH)   # üreticinin gerçek fiyat tablosu
+        fam = lamp_family(info, en_cm, yuk_cm)
+        if fam == "long_cylinder":
+            raw = _interp_cost(en_cm, LONG_CYLINDER_PRICES)
+            if _premium_finish(info):
+                raw *= 1.15                       # patina/iki renkli: +%15
+        else:
+            raw = _interp_cost(en_cm, LAMP_FAMILY_PRICES[fam])
+
+    elif code == "SNK":
+        en_in = en_cm / _INCH
+        if "kitchen" in (section_name or "").lower():
+            raw = _interp_cost(en_in, SINK_KITCHEN_IN)
+        else:
+            shape = str((info or {}).get("shape") or "round").lower()
+            if shape.startswith("oval"):
+                raw = _interp_cost(en_in, SINK_OVAL_IN)
+            elif shape.startswith(("rect", "square")):
+                raw = _interp_cost(en_in, SINK_RECT_IN)
+            else:
+                raw = _interp_cost(en_in, SINK_ROUND_IN)
+
+    elif code == "SHW":
+        raw = _interp_cost(en_cm / _INCH, SHOWER_D_IN)
+    elif code in ("BBT", "BWL"):
+        raw = _interp_cost(en_cm, BIRDBATH_CM)          # tek katman varsayımı
+    elif code == "MIR":
+        raw = _interp_cost(max(boy_cm, en_cm) / _INCH, MIRROR_H_IN)   # yüksekliğe göre
+    elif code == "SCN":
+        # aplik: baskın ölçü = yükseklik (bölüme göre boy veya yuk'ta olabilir). 2'li SET toplamı.
+        raw = _interp_cost(max(en_cm, boy_cm, yuk_cm), SCONCE_SET_CM)
+    elif code == "LTN":
+        raw = _interp_cost(max(yuk_cm, boy_cm, en_cm), LANTERN_H_CM)
+    elif code == "SHF":
+        raw = _interp_cost(en_cm, SHELF_CM)
     else:
+        dim = en_cm or max(boy_cm, yuk_cm)
         raw = COST_K.get(code, 0.50) * (dim ** COST_EXP)
-    if raw < 100:
-        return int(round(raw / 5.0) * 5)     # <100 → 5'e yuvarla
-    return int(round(raw / 10.0) * 10)       # ≥100 → 10'a yuvarla
+
+    return _round_cost(raw)
+
+
+def suggest_cost_detail(section_name: str, en_cm: float, boy_cm: float, yuk_cm: float,
+                        info: dict | None = None):
+    """suggest_cost + pazarlık hedefi ve kabul edilebilir üst limit.
+    Katsayılar kullanıcının örnek tablosundan kalibre edildi
+    (85→75-80/95 · 120→105-110/135 · 240→215-225/265 · 350→310-325/390)."""
+    est = suggest_cost(section_name, en_cm, boy_cm, yuk_cm, info)
+    if not est:
+        return None
+    code = _refine_code(SECTION_TO_CATEGORY.get(section_name, "DGR"), info)
+    fam = lamp_family(info, en_cm, yuk_cm) if code == "PDL" else None
+    return {
+        "cost": est,
+        "target_low": _round_cost(est * 0.890),   # pazarlık hedefi alt ucu
+        "target_high": _round_cost(est * 0.935),  # pazarlık hedefi üst ucu
+        "max_ok": _round_cost(est * 1.110),       # kabul edilebilir üst limit
+        "family": fam,
+        "family_tr": LAMP_FAMILY_TR.get(fam or "", ""),
+    }
 
 
 def _make_sku(section_name: str, listing_id: int, index: int) -> str:
@@ -466,8 +613,17 @@ def analyze_image(image_path: str) -> dict:
   "style": "design style e.g. rustic, modern, artisan",
   "room_type": "where used e.g. bathroom, kitchen, garden",
   "key_features": ["feature1", "feature2", "feature3"],
-  "shape": "round OR oval OR rectangular OR square — best guess from image"
+  "shape": "round OR oval OR rectangular OR square — best guess from image",
+  "form_family": "PENDANT/HANGING LAMPS ONLY (otherwise null). Pick exactly one id:
+     very_flat      = very shallow disc / UFO, body height only ~22-25% of width, minimal material
+     shallow_cone   = shallow cone, height ~35-40% of width, no neck, simple wide form
+     standard_dome  = half dome / normal bell, height ~45-55% of width, plain hammered surface
+     deep_dome      = taller & fuller dome, has a neck, height ~58-75% of width, often patina
+     spiral_ribbed  = spiral lines, ribs, perforations, asymmetric or special curved form
+     long_cylinder  = tube/capsule, body height MORE THAN 2x the width",
+  "workmanship": "normal (simple form, single colour, basic hammering) OR medium (patina, neck, deeper body, different inner/outer finish) OR high (spiral, ribs, perforation, asymmetry, two-tone, glass/mirror/watertight function)"
 }
+Judge form_family from the BODY only — ignore cord, canopy, socket and bulb.
 Return only valid JSON, no markdown, no explanation."""
 
     return _llm_json(prompt, img_b64, mime, temperature=0.1)
@@ -492,6 +648,20 @@ SIZE_PRESETS_CM = {
     "DEC": [20, 30, 41, 51, 61],
     "DGR": [20, 30, 41, 51, 61],
 }
+# Uzun silindir lambalar farklı ölçü ailesi kullanır (çap küçük, gövde uzun)
+LONG_CYLINDER_PRESETS_CM = [15, 20, 25]
+
+# Lamba form ailesine göre boy/en (yükseklik/çap) oranı: (varsayılan, alt, üst)
+# Genel PDL sınırları (0.45-1.25) çok basık ve uzun silindir formları eziyordu.
+LAMP_FAMILY_RATIO = {
+    "very_flat":     (0.235, 0.20, 0.28),
+    "shallow_cone":  (0.375, 0.33, 0.42),
+    "standard_dome": (0.50,  0.45, 0.57),
+    "deep_dome":     (0.66,  0.58, 0.78),
+    "spiral_ribbed": (0.56,  0.45, 0.75),
+    "long_cylinder": (2.20,  2.00, 2.60),
+}
+
 # Boy/En oranı: varsayılan + (alt, üst) sınır — görselden gelen oran bu aralığa kısılır
 RATIO_DEFAULT = {"PDL": 0.62, "SCN": 1.4, "SHW": 0.3, "FAC": 0.8, "SNK": 0.8,
                  "BBT": 0.4, "BWL": 0.55, "MIR": 1.0, "DEC": 0.8, "DGR": 0.8}
@@ -549,12 +719,20 @@ def suggest_sizes(info: dict, image_path: str | None = None) -> list[dict]:
     code = _guess_category(info)
     presets = SIZE_PRESETS_CM.get(code, SIZE_PRESETS_CM["DGR"])
     lo, hi = RATIO_BOUNDS.get(code, (0.4, 1.3))
-
     hw = RATIO_DEFAULT.get(code, 0.8)               # boy/en varsayılanı
+
+    # Lambalarda oran/preset FORM AİLESİNE göre belirlenir (basık disk 0.22, silindir 2.2)
+    if code == "PDL":
+        fam = str((info or {}).get("form_family") or "").strip().lower()
+        if fam in LAMP_FAMILY_RATIO:
+            hw, lo, hi = LAMP_FAMILY_RATIO[fam]
+            if fam == "long_cylinder":
+                presets = LONG_CYLINDER_PRESETS_CM
+
     wh = _image_wh_ratio(info, image_path)          # görselden en/boy
     if wh and wh > 0:
         hw = 1.0 / wh                               # boy/en = 1 / (en/boy)
-    hw = min(hi, max(lo, hw))                        # kategori sınırına kıs
+    hw = min(hi, max(lo, hw))                        # aile/kategori sınırına kıs
 
     sizes = []
     for w_cm in presets[:5]:
